@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otelexi Invoicing</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-router-dom@6.20.0/dist/umd/react-router-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/zustand@4.4.7/dist/index.umd.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* ========================================
+           CSS VARIABLES — LIGHT & DARK THEMES
+           ======================================== */
+        [data-theme="light"] {
+            --bg-primary: #F4F6F8;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #EDF0F4;
+            --text-primary: #111827;
+            --text-secondary: #4B5563;
+            --text-muted: #9CA3AF;
+            --border-color: #E5E7EB;
+            --sidebar-bg: #FFFFFF;
+            --sidebar-hover: #F0FDFA;
+            --sidebar-active-bg: #CCFBF1;
+            --sidebar-active-text: #0F766E;
+            --header-bg: #FFFFFF;
+            --accent: #0D9488;
+            --accent-hover: #0F766E;
+            --accent-light: #F0FDFA;
+            --accent-text: #FFFFFF;
+            --danger: #DC2626;
+            --danger-light: #FEF2F2;
+            --warning: #D97706;
+            --warning-light: #FFFBEB;
+            --success: #059669;
+            --success-light: #ECFDF5;
+            --info: #2563EB;
+            --info-light: #EFF6FF;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --card-shadow-hover: 0 4px 12px rgba(0,0,0,0.08);
+            --overlay-bg: rgba(0,0,0,0.3);
+            --input-bg: #F9FAFB;
+            --input-border: #D1D5DB;
+            --input-focus-border: #0D9488;
+            --badge-paid-bg: #ECFDF5;
+            --badge-paid-text: #059669;
+            --badge-pending-bg: #FFFBEB;
+            --badge-pending-text: #D97706;
+            --badge-overdue-bg: #FEF2F2;
+            --badge-overdue-text: #DC2626;
+            --badge-draft-bg: #F3F4F6;
+            --badge-draft-text: #6B7280;
+            --badge-accepted-bg: #ECFDF5;
+            --badge-accepted-text: #059669;
+            --badge-rejected-bg: #FEF2F2;
+            --badge-rejected-text: #DC2626;
+            --badge-expired-bg: #F3F4F6;
+            --badge-expired-text: #6B7280;
+            --badge-active-bg: #ECFDF5;
+            --badge-active-text: #059669;
+            --badge-inactive-bg: #FEF2F2;
+            --badge-inactive-text: #DC2626;
+            --auth-left-bg: linear-gradient(145deg, #0F766E 0%, #0D9488 40%, #14B8A6 100%);
+        }
+        [data-theme="dark"] {
+            --bg-primary: #0B1120;
+            --bg-secondary: #151F32;
+            --bg-tertiary: #1E2D45;
+            --text-primary: #F1F5F9;
+            --text-secondary: #94A3B8;
+            --text-muted: #4B6080;
+            --border-color: #1E2D45;
+            --sidebar-bg: #111B2E;
+            --sidebar-hover: #1A2740;
+            --sidebar-active-bg: #134E4A;
+            --sidebar-active-text: #5EEAD4;
+            --header-bg: #111B2E;
+            --accent: #14B8A6;
+            --accent-hover: #2DD4BF;
+            --accent-light: #134E4A;
+            --accent-text: #FFFFFF;
+            --danger: #F87171;
+            --danger-light: #3B1515;
+            --warning: #FBBF24;
+            --warning-light: #3B2E0A;
+            --success: #34D399;
+            --success-light: #0A3B2A;
+            --info: #60A5FA;
+            --info-light: #0C2A52;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --card-shadow-hover: 0 4px 12px rgba(0,0,0,0.4);
+            --overlay-bg: rgba(0,0,0,0.6);
+            --input-bg: #1A2740;
+            --input-border: #2A3B55;
+            --input-focus-border: #14B8A6;
+            --badge-paid-bg: #0A3B2A;
+            --badge-paid-text: #34D399;
+            --badge-pending-bg: #3B2E0A;
+            --badge-pending-text: #FBBF24;
+            --badge-overdue-bg: #3B1515;
+            --badge-overdue-text: #F87171;
+            --badge-draft-bg: #1E2D45;
+            --badge-draft-text: #94A3B8;
+            --badge-accepted-bg: #0A3B2A;
+            --badge-accepted-text: #34D399;
+            --badge-rejected-bg: #3B1515;
+            --badge-rejected-text: #F87171;
+            --badge-expired-bg: #1E2D45;
+            --badge-expired-text: #94A3B8;
+            --badge-active-bg: #0A3B2A;
+            --badge-active-text: #34D399;
+            --badge-inactive-bg: #3B1515;
+            --badge-inactive-text: #F87171;
+            --auth-left-bg: linear-gradient(145deg, #064E3B 0%, #065F46 40%, #047857 100%);
+        }
+
+        /* ========================================
+           RESET & BASE
+           ======================================== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background 0.3s ease, color 0.3s ease;
+            overflow-x: hidden;
+        }
+        a { text-decoration: none; color: inherit; }
+        button { font-family: inherit; cursor: pointer; border: none; background: none; }
+        input, select, textarea { font-family: inherit; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        /* ========================================
+           APP LAYOUT
+           ======================================== */
+        .app-layout { display: flex; min-height: 100vh; }
+        .main-wrapper { flex: 1; display: flex; flex-direction: column; margin-left: 260px; transition: margin-left 0.3s ease; }
+
+        /* ========================================
+           SIDEBAR
+           ======================================== */
+        .app-sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0; width: 260px;
+            background: var(--sidebar-bg); border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+        }
+        .sidebar-header {
+            height: 64px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+        }
+        .sidebar-logo { display: flex; align-items: center; gap: 10px; }
+        .sidebar-logo-icon {
+            width: 34px; height: 34px; background: var(--accent); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px;
+        }
+        .sidebar-logo-text { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
+        .sidebar-logo-text span { color: var(--accent); }
+        .sidebar-theme-toggle {
+            width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 14px;
+            transition: all 0.2s ease; background: var(--bg-tertiary);
+        }
+        .sidebar-theme-toggle:hover { color: var(--accent); background: var(--sidebar-hover); }
+        .sidebar-nav { flex: 1; overflow-y: auto; padding: 16px 12px; }
+        .sidebar-section-label {
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-muted); padding: 8px 12px 6px; margin-top: 8px;
+        }
+        .menu-item { margin-bottom: 2px; }
+        .menu-item-btn {
+            width: 100%; display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 500;
+            color: var(--text-secondary); transition: all 0.2s ease; position: relative;
+        }
+        .menu-item-btn i.menu-icon { width: 20px; text-align: center; font-size: 15px; }
+        .menu-item-btn .menu-label { flex: 1; text-align: left; }
+        .menu-item-btn .menu-chevron {
+            font-size: 11px; transition: transform 0.25s ease; color: var(--text-muted);
+        }
+        .menu-item-btn:hover { background: var(--sidebar-hover); color: var(--text-primary); }
+        .menu-item.active > .menu-item-btn {
+            background: var(--sidebar-active-bg); color: var(--sidebar-active-text); font-weight: 600;
+        }
+        .menu-item.active > .menu-item-btn::before {
+            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+            width: 3px; height: 20px; background: var(--accent); border-radius: 0 3px 3px 0;
+        }
+        .menu-item.submenu-open > .menu-item-btn .menu-chevron { transform: rotate(90deg); }
+        .submenu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .submenu.open { max-height: 200px; }
+        .submenu-item {
+            display: block; padding: 8px 12px 8px 46px; font-size: 13px; font-weight: 400;
+            color: var(--text-muted); border-radius: 6px; transition: all 0.2s ease;
+            margin-bottom: 1px;
+        }
+        .submenu-item:hover { color: var(--text-primary); background: var(--sidebar-hover); }
+        .submenu-item.active { color: var(--sidebar-active-text); font-weight: 500; }
+
+        /* ========================================
+           HEADER
+           ======================================== */
+        .app-header {
+            height: 64px; background: var(--header-bg); border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+            position: sticky; top: 0; z-index: 50; flex-shrink: 0;
+            transition: background 0.3s ease;
+        }
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .hamburger-btn {
+            display: none; width: 38px; height: 38px; border-radius: 8px; align-items: center;
+            justify-content: center; color: var(--text-secondary); font-size: 18px;
+            transition: all 0.2s ease; background: var(--bg-tertiary);
+        }
+        .hamburger-btn:hover { color: var(--accent); }
+        .header-page-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+        .header-right { display: flex; align-items: center; gap: 8px; }
+        .header-icon-btn {
+            width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 16px;
+            transition: all 0.2s ease; position: relative;
+        }
+        .header-icon-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+        .header-icon-btn .notif-dot {
+            position: absolute; top: 8px; right: 8px; width: 7px; height: 7px;
+            background: var(--danger); border-radius: 50%; border: 1.5px solid var(--header-bg);
+        }
+        .user-btn {
+            display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px;
+            border-radius: 10px; transition: all 0.2s ease; margin-left: 4px;
+        }
+        .user-btn:hover { background: var(--bg-tertiary); }
+        .user-avatar {
+            width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700;
+        }
+        .user-btn-info { display: flex; flex-direction: column; }
+        .user-btn-name { font-size: 13px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+        .user-btn-role { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+
+        /* ========================================
+           USER DROPDOWN
+           ======================================== */
+        .user-dropdown {
+            position: absolute; top: calc(100% + 8px); right: 0; width: 220px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            padding: 6px; z-index: 200; opacity: 0; visibility: hidden;
+            transform: translateY(-8px) scale(0.96); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .user-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+        .dropdown-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+            border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary);
+            transition: all 0.15s ease; width: 100%;
+        }
+        .dropdown-item i { width: 18px; text-align: center; font-size: 14px; }
+        .dropdown-item:hover { background: var(--sidebar-hover); color: var(--text-primary); }
+        .dropdown-item.danger { color: var(--danger); }
+        .dropdown-item.danger:hover { background: var(--danger-light); }
+        .dropdown-divider { height: 1px; background: var(--border-color); margin: 4px 8px; }
+
+        /* ========================================
+           MAIN CONTENT
+           ======================================== */
+        .main-content { flex: 1; padding: 28px; overflow-y: auto; }
+
+        /* ========================================
+           CARDS
+           ======================================== */
+        .card {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 12px; box-shadow: var(--card-shadow); transition: all 0.25s ease;
+        }
+        .card:hover { box-shadow: var(--card-shadow-hover); }
+        .card-header {
+            padding: 18px 22px; border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-header h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+        .card-body { padding: 22px; }
+
+        /* ========================================
+           STAT CARDS
+           ======================================== */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 28px; }
+        .stat-card {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 20px; box-shadow: var(--card-shadow);
+            transition: all 0.25s ease; display: flex; align-items: flex-start; gap: 16px;
+        }
+        .stat-card:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
+        .stat-icon {
+            width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center;
+            justify-content: center; font-size: 18px; flex-shrink: 0;
+        }
+        .stat-icon.teal { background: var(--accent-light); color: var(--accent); }
+        .stat-icon.amber { background: var(--warning-light); color: var(--warning); }
+        .stat-icon.coral { background: var(--danger-light); color: var(--danger); }
+        .stat-icon.emerald { background: var(--success-light); color: var(--success); }
+        .stat-info { flex: 1; }
+        .stat-label { font-size: 13px; color: var(--text-muted); font-weight: 500; margin-bottom: 4px; }
+        .stat-value { font-size: 24px; font-weight: 800; color: var(--text-primary); line-height: 1.2; letter-spacing: -0.5px; }
+        .stat-change { font-size: 12px; font-weight: 600; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; }
+        .stat-change.up { color: var(--success); background: var(--success-light); }
+        .stat-change.down { color: var(--danger); background: var(--danger-light); }
+
+        /* ========================================
+           TABLES
+           ======================================== */
+        .table-wrapper { overflow-x: auto; }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th {
+            text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color); white-space: nowrap;
+        }
+        .data-table td {
+            padding: 14px 16px; font-size: 14px; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color); white-space: nowrap;
+        }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table tr:hover td { background: var(--sidebar-hover); }
+
+        /* ========================================
+           BADGES
+           ======================================== */
+        .badge {
+            display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px;
+            font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+        }
+        .badge-paid { background: var(--badge-paid-bg); color: var(--badge-paid-text); }
+        .badge-pending { background: var(--badge-pending-bg); color: var(--badge-pending-text); }
+        .badge-overdue { background: var(--badge-overdue-bg); color: var(--badge-overdue-text); }
+        .badge-draft { background: var(--badge-draft-bg); color: var(--badge-draft-text); }
+        .badge-accepted { background: var(--badge-accepted-bg); color: var(--badge-accepted-text); }
+        .badge-rejected { background: var(--badge-rejected-bg); color: var(--badge-rejected-text); }
+        .badge-expired { background: var(--badge-expired-bg); color: var(--badge-expired-text); }
+        .badge-active { background: var(--badge-active-bg); color: var(--badge-active-text); }
+        .badge-inactive { background: var(--badge-inactive-bg); color: var(--badge-inactive-text); }
+
+        /* ========================================
+           BUTTONS
+           ======================================== */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;
+            transition: all 0.2s ease; border: none; cursor: pointer; line-height: 1.4;
+        }
+        .btn-primary { background: var(--accent); color: var(--accent-text); }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(13,148,136,0.3); }
+        .btn-outline {
+            background: transparent; color: var(--accent); border: 1.5px solid var(--accent);
+        }
+        .btn-outline:hover { background: var(--accent-light); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); }
+        .btn-ghost:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+        .btn-lg { padding: 12px 28px; font-size: 15px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        .btn .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+
+        /* ========================================
+           FORM INPUTS
+           ======================================== */
+        .form-group { margin-bottom: 18px; }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+        .form-input-wrap { position: relative; }
+        .form-input-wrap i {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--text-muted); font-size: 14px; pointer-events: none; transition: color 0.2s;
+        }
+        .form-input {
+            width: 100%; padding: 11px 14px 11px 42px; border: 1.5px solid var(--input-border);
+            border-radius: 8px; font-size: 14px; color: var(--text-primary);
+            background: var(--input-bg); transition: all 0.2s ease; outline: none;
+        }
+        .form-input:focus { border-color: var(--input-focus-border); box-shadow: 0 0 0 3px rgba(13,148,136,0.1); }
+        .form-input:focus + i, .form-input:focus ~ i { color: var(--accent); }
+        .form-input.no-icon { padding-left: 14px; }
+        .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+        .form-row { display: flex; gap: 14px; }
+        .form-row .form-group { flex: 1; }
+
+        /* ========================================
+           ALERT / TOAST SYSTEM
+           ======================================== */
+        .alert-container {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 10px; max-width: 400px; width: 100%;
+            pointer-events: none;
+        }
+        .alert-box {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            overflow: hidden; pointer-events: all; position: relative;
+            animation: alertSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .alert-box.closing { animation: alertSlideOut 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .alert-inner { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; }
+        .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+        .alert-icon.success { color: var(--success); }
+        .alert-icon.error { color: var(--danger); }
+        .alert-icon.warning { color: var(--warning); }
+        .alert-icon.info { color: var(--info); }
+        .alert-content { flex: 1; }
+        .alert-title { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+        .alert-message { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+        .alert-close {
+            width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 13px; flex-shrink: 0;
+            transition: all 0.15s ease;
+        }
+        .alert-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .alert-progress-wrap { height: 3px; background: var(--bg-tertiary); }
+        .alert-progress {
+            height: 100%; animation: progressShrink 5s linear forwards;
+        }
+        .alert-progress.success { background: var(--success); }
+        .alert-progress.error { background: var(--danger); }
+        .alert-progress.warning { background: var(--warning); }
+        .alert-progress.info { background: var(--info); }
+
+        /* ========================================
+           AUTH PAGES
+           ======================================== */
+        .auth-page { min-height: 100vh; display: flex; }
+        .auth-left {
+            width: 45%; background: var(--auth-left-bg); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; padding: 60px 40px; position: relative;
+            overflow: hidden;
+        }
+        .auth-left::before {
+            content: ''; position: absolute; inset: 0;
+            background: repeating-linear-gradient(
+                45deg, transparent, transparent 30px, rgba(255,255,255,0.03) 30px, rgba(255,255,255,0.03) 60px
+            );
+        }
+        .auth-left .deco {
+            position: absolute; border-radius: 50%; background: rgba(255,255,255,0.06);
+        }
+        .auth-left .deco-1 { width: 300px; height: 300px; top: -80px; right: -60px; }
+        .auth-left .deco-2 { width: 200px; height: 200px; bottom: -40px; left: -40px; }
+        .auth-left .deco-3 { width: 120px; height: 120px; bottom: 20%; right: 10%; background: rgba(255,255,255,0.04); }
+        .auth-brand { text-align: center; position: relative; z-index: 1; }
+        .auth-brand-logo {
+            width: 64px; height: 64px; background: rgba(255,255,255,0.15); border-radius: 16px;
+            display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;
+            font-size: 26px; color: #fff; backdrop-filter: blur(10px);
+        }
+        .auth-brand h1 { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -1px; margin-bottom: 12px; }
+        .auth-brand p { font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.6; max-width: 320px; }
+        .auth-features { margin-top: 48px; position: relative; z-index: 1; display: flex; flex-direction: column; gap: 18px; }
+        .auth-feature { display: flex; align-items: center; gap: 14px; color: rgba(255,255,255,0.85); font-size: 14px; }
+        .auth-feature i { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .auth-right {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 40px; background: var(--bg-primary);
+        }
+        .auth-form-wrap { width: 100%; max-width: 420px; }
+        .auth-form-header { margin-bottom: 32px; }
+        .auth-form-header h2 { font-size: 26px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; margin-bottom: 8px; }
+        .auth-form-header p { font-size: 14px; color: var(--text-muted); }
+        .auth-form .btn { width: 100%; padding: 12px; font-size: 15px; margin-top: 6px; }
+        .auth-form-footer { text-align: center; margin-top: 24px; font-size: 14px; color: var(--text-muted); }
+        .auth-form-footer a { color: var(--accent); font-weight: 600; transition: color 0.2s; }
+        .auth-form-footer a:hover { color: var(--accent-hover); }
+        .auth-remember { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .auth-remember label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+        .auth-remember label input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+        .auth-remember a { font-size: 13px; color: var(--accent); font-weight: 500; }
+        .auth-terms { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+        .auth-terms label { font-size: 13px; color: var(--text-secondary); cursor: pointer; line-height: 1.5; display: flex; align-items: flex-start; gap: 8px; }
+        .auth-terms label input { accent-color: var(--accent); width: 16px; height: 16px; margin-top: 2px; cursor: pointer; }
+        .auth-terms a { color: var(--accent); font-weight: 500; }
+
+        /* ========================================
+           404 PAGE
+           ======================================== */
+        .not-found-page {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 80vh; text-align: center; padding: 40px;
+        }
+        .not-found-icon { font-size: 100px; color: var(--text-muted); margin-bottom: 24px; opacity: 0.3; }
+        .not-found-page h1 { font-size: 120px; font-weight: 900; color: var(--text-primary); line-height: 1; letter-spacing: -4px; margin-bottom: 8px; }
+        .not-found-page h2 { font-size: 22px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; }
+        .not-found-page p { font-size: 15px; color: var(--text-muted); margin-bottom: 32px; max-width: 400px; }
+
+        /* ========================================
+           DASHBOARD SPECIFIC
+           ======================================== */
+        .dashboard-welcome { margin-bottom: 28px; }
+        .dashboard-welcome h1 { font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; margin-bottom: 4px; }
+        .dashboard-welcome p { font-size: 14px; color: var(--text-muted); }
+        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .quick-action-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 18px 12px; border-radius: 10px; border: 1.5px dashed var(--border-color);
+            color: var(--text-secondary); font-size: 12px; font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .quick-action-btn i { font-size: 20px; color: var(--accent); }
+        .quick-action-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+
+        /* ========================================
+           SETTINGS & PROFILE PAGES
+           ======================================== */
+        .settings-grid { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+        .settings-nav { display: flex; flex-direction: column; gap: 4px; }
+        .settings-nav-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        .settings-nav-item i { width: 18px; text-align: center; }
+        .settings-nav-item:hover { background: var(--sidebar-hover); color: var(--text-primary); }
+        .settings-nav-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+        .profile-header-card { display: flex; align-items: center; gap: 24px; padding: 28px; }
+        .profile-avatar-lg {
+            width: 80px; height: 80px; border-radius: 16px; background: var(--accent);
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 28px; font-weight: 800; flex-shrink: 0;
+        }
+        .profile-info h2 { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+        .profile-info p { font-size: 13px; color: var(--text-muted); }
+        .profile-info .badge { margin-top: 8px; }
+
+        /* ========================================
+           SIDEBAR OVERLAY (MOBILE)
+           ======================================== */
+        .sidebar-overlay {
+            display: none; position: fixed; inset: 0; background: var(--overlay-bg);
+            z-index: 99; opacity: 0; visibility: hidden; transition: all 0.3s ease;
+        }
+        .sidebar-overlay.active { opacity: 1; visibility: visible; }
+
+        /* ========================================
+           TABLE ACTION ICONS
+           ======================================== */
+        .table-actions { display: flex; gap: 4px; }
+        .table-action-btn {
+            width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 13px; transition: all 0.15s ease;
+        }
+        .table-action-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .table-action-btn.danger:hover { background: var(--danger-light); color: var(--danger); }
+
+        /* ========================================
+           ANIMATIONS
+           ======================================== */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes alertSlideIn { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes alertSlideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(110%); opacity: 0; } }
+        @keyframes progressShrink { from { width: 100%; } to { width: 0%; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .fade-in-up { animation: fadeInUp 0.4s ease forwards; }
+
+        /* ========================================
+           RESPONSIVE
+           ======================================== */
+        @media (max-width: 1024px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .settings-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .main-wrapper { margin-left: 0; }
+            .app-sidebar { transform: translateX(-100%); }
+            .app-sidebar.open { transform: translateX(0); }
+            .sidebar-overlay { display: block; }
+            .hamburger-btn { display: flex; }
+            .user-btn-info { display: none; }
+            .auth-page { flex-direction: column; }
+            .auth-left { display: none; }
+            .auth-right { padding: 32px 20px; }
+            .main-content { padding: 20px 16px; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .data-table { font-size: 13px; }
+            .data-table th, .data-table td { padding: 10px 12px; }
+            .alert-container { right: 12px; left: 12px; max-width: none; }
+            .profile-header-card { flex-direction: column; text-align: center; }
+        }
+        @media (max-width: 480px) {
+            .form-row { flex-direction: column; gap: 0; }
+            .quick-actions { grid-template-columns: 1fr; }
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        /* ================================================================
+           OTELEXI INVOICING — Complete React Application
+           ================================================================ */
+
+        const { useState, useEffect, useRef, useCallback, createElement } = React;
+        const { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation, Link } = ReactRouterDOM;
+        const createStore = zustand.create;
+
+        /* ================================================================
+           ZUSTAND STORES
+           ================================================================ */
+
+        // ── Auth Store ──
+        const useAuthStore = createStore((set, get) => ({
+            token: localStorage.getItem('otelexi_token') || null,
+            expiresAt: localStorage.getItem('otelexi_expires_at')
+                ? parseInt(localStorage.getItem('otelexi_expires_at'), 10) : null,
+            user: JSON.parse(localStorage.getItem('otelexi_user') || 'null'),
+            isAuthenticated: !!localStorage.getItem('otelexi_token'),
+
+            login: (token, expiresAt, user) => {
+                localStorage.setItem('otelexi_token', token);
+                localStorage.setItem('otelexi_expires_at', String(expiresAt));
+                localStorage.setItem('otelexi_user', JSON.stringify(user));
+                set({ token, expiresAt, user, isAuthenticated: true });
+            },
+
+            logout: () => {
+                localStorage.removeItem('otelexi_token');
+                localStorage.removeItem('otelexi_expires_at');
+                localStorage.removeItem('otelexi_user');
+                set({ token: null, expiresAt: null, user: null, isAuthenticated: false });
+            },
+
+            // Returns true if token was expired and user was logged out
+            checkExpiration: () => {
+                const { expiresAt, logout } = get();
+                if (expiresAt && Date.now() >= expiresAt) {
+                    logout();
+                    return true;
+                }
+                return false;
+            }
+        }));
+
+        // ── Theme Store ──
+        const useThemeStore = createStore((set) => ({
+            theme: localStorage.getItem('otelexi_theme') || 'light',
+            toggleTheme: () => set((state) => {
+                const next = state.theme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('otelexi_theme', next);
+                return { theme: next };
+            })
+        }));
+
+        // ── Alert Store ──
+        const useAlertStore = createStore((set) => ({
+            alerts: [],
+            addAlert: (message, type = 'success', title = '') => {
+                const id = Date.now() + Math.random();
+                set((s) => ({ alerts: [...s.alerts, { id, message, type, title, closing: false }] }));
+                // Start closing animation at 4.5s, remove at 5s
+                setTimeout(() => {
+                    set((s) => ({
+                        alerts: s.alerts.map(a => a.id === id ? { ...a, closing: true } : a)
+                    }));
+                    setTimeout(() => {
+                        set((s) => ({ alerts: s.alerts.filter(a => a.id !== id) }));
+                    }, 400);
+                }, 4600);
+            },
+            dismissAlert: (id) => {
+                set((s) => ({
+                    alerts: s.alerts.map(a => a.id === id ? { ...a, closing: true } : a)
+                }));
+                setTimeout(() => {
+                    set((s) => ({ alerts: s.alerts.filter(a => a.id !== id) }));
+                }, 400);
+            }
+        }));
+
+        // ── UI Store (sidebar, dropdown state) ──
+        const useUIStore = createStore((set) => ({
+            sidebarOpen: false,
+            userDropdownOpen: false,
+            toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+            closeSidebar: () => set({ sidebarOpen: false }),
+            toggleUserDropdown: () => set((s) => ({ userDropdownOpen: !s.userDropdownOpen })),
+            closeUserDropdown: () => set({ userDropdownOpen: false })
+        }));
+
+        /* ================================================================
+           SAMPLE DATA
+           ================================================================ */
+
+        const sampleInvoices = [
+            { id: 'INV-2024-001', client: 'Acme Corporation', amount: 12500.00, status: 'paid', date: '2024-01-15' },
+            { id: 'INV-2024-002', client: 'TechStart Inc.', amount: 8750.00, status: 'pending', date: '2024-01-18' },
+            { id: 'INV-2024-003', client: 'Global Ventures', amount: 34000.00, status: 'overdue', date: '2024-01-05' },
+            { id: 'INV-2024-004', client: 'Metro Services', amount: 5200.00, status: 'draft', date: '2024-01-20' },
+            { id: 'INV-2024-005', client: 'Pinnacle Group', amount: 19800.00, status: 'paid', date: '2024-01-12' },
+            { id: 'INV-2024-006', client: 'Bluewave LLC', amount: 7300.00, status: 'pending', date: '2024-01-22' },
+            { id: 'INV-2024-007', client: 'Summit Partners', amount: 26100.00, status: 'paid', date: '2024-01-08' },
+        ];
+
+        const sampleQuotations = [
+            { id: 'QUO-2024-001', client: 'Acme Corporation', amount: 15000.00, status: 'accepted', validUntil: '2024-02-15' },
+            { id: 'QUO-2024-002', client: 'NewWave Tech', amount: 22000.00, status: 'pending', validUntil: '2024-02-20' },
+            { id: 'QUO-2024-003', client: 'Summit Partners', amount: 9800.00, status: 'rejected', validUntil: '2024-01-30' },
+            { id: 'QUO-2024-004', client: 'CoreLogic Inc.', amount: 41000.00, status: 'pending', validUntil: '2024-03-01' },
+            { id: 'QUO-2024-005', client: 'Apex Solutions', amount: 16500.00, status: 'expired', validUntil: '2024-01-10' },
+            { id: 'QUO-2024-006', client: 'Helix Digital', amount: 11200.00, status: 'accepted', validUntil: '2024-02-28' },
+        ];
+
+        const sampleUsers = [
+            { id: 1, name: 'John Admin', email: 'john@otelexi.com', role: 'Admin', status: 'active' },
+            { id: 2, name: 'Sarah Mitchell', email: 'sarah@otelexi.com', role: 'Manager', status: 'active' },
+            { id: 3, name: 'Mike Johnson', email: 'mike@otelexi.com', role: 'Viewer', status: 'active' },
+            { id: 4, name: 'Emily Chen', email: 'emily@otelexi.com', role: 'Manager', status: 'inactive' },
+            { id: 5, name: 'David Okonkwo', email: 'david@otelexi.com', role: 'Viewer', status: 'active' },
+            { id: 6, name: 'Lisa Fernandez', email: 'lisa@otelexi.com', role: 'Admin', status: 'active' },
+        ];
+
+        const dashboardStats = [
+            { label: 'Total Invoices', value: '248', change: '+12.5%', up: true, icon: 'fa-file-invoice', color: 'teal' },
+            { label: 'Total Revenue', value: '$184,500', change: '+8.2%', up: true, icon: 'fa-dollar-sign', color: 'amber' },
+            { label: 'Pending Payments', value: '23', change: '-4.1%', up: false, icon: 'fa-clock', color: 'coral' },
+            { label: 'Active Clients', value: '67', change: '+3.7%', up: true, icon: 'fa-user-group', color: 'emerald' },
+        ];
+
+        /* ================================================================
+           MENU CONFIG
+           ================================================================ */
+
+        const menuItems = [
+            { icon: 'fa-chart-line', label: 'Dashboard', path: '/dashboard' },
+            {
+                icon: 'fa-file-invoice-dollar', label: 'Invoice', path: '/invoice',
+                submenu: [
+                    { label: 'All Invoices', path: '/invoice' },
+                    { label: 'Create Invoice', path: '/invoice/create' },
+                    { label: 'Draft Invoices', path: '/invoice/drafts' },
+                ]
+            },
+            {
+                icon: 'fa-file-lines', label: 'Quotation', path: '/quotation',
+                submenu: [
+                    { label: 'All Quotations', path: '/quotation' },
+                    { label: 'Create Quotation', path: '/quotation/create' },
+                    { label: 'Pending Quotations', path: '/quotation/pending' },
+                ]
+            },
+            {
+                icon: 'fa-users', label: 'Users', path: '/users',
+                submenu: [
+                    { label: 'All Users', path: '/users' },
+                    { label: 'Add User', path: '/users/add' },
+                    { label: 'Roles & Permissions', path: '/users/roles' },
+                ]
+            },
+            { icon: 'fa-gear', label: 'Settings', path: '/settings' },
+        ];
+
+        /* ================================================================
+           HELPERS
+           ================================================================ */
+
+        function formatCurrency(n) { return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2 }); }
+        function getInitials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2); }
+        function formatDate(d) { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        function getAlertTitle(type) {
+            const map = { success: 'Success', error: 'Error', warning: 'Warning', info: 'Information' };
+            return map[type] || 'Notice';
+        }
+        function getAlertIcon(type) {
+            const map = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
+            return map[type] || 'fa-circle-info';
+        }
+
+        /* ================================================================
+           COMPONENTS
+           ================================================================ */
+
+        // ── Alert Container ──
+        function AlertContainer() {
+            const { alerts, dismissAlert } = useAlertStore();
+            if (alerts.length === 0) return null;
+            return (
+                <div className="alert-container" role="alert" aria-live="polite">
+                    {alerts.map(a => (
+                        <div key={a.id} className={`alert-box ${a.closing ? 'closing' : ''}`}>
+                            <div className="alert-inner">
+                                <i className={`fa-solid ${getAlertIcon(a.type)} alert-icon ${a.type}`}></i>
+                                <div className="alert-content">
+                                    <div className="alert-title">{a.title || getAlertTitle(a.type)}</div>
+                                    <div className="alert-message">{a.message}</div>
+                                </div>
+                                <button className="alert-close" onClick={() => dismissAlert(a.id)} aria-label="Dismiss notification">
+                                    <i className="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div className="alert-progress-wrap">
+                                <div className={`alert-progress ${a.type}`}></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // ── Protected Route ──
+        function ProtectedRoute() {
+            const { isAuthenticated, checkExpiration } = useAuthStore();
+            checkExpiration();
+            if (!isAuthenticated) return <Navigate to="/login" replace />;
+            return <Outlet />;
+        }
+
+        // ── Sidebar ──
+        function Sidebar() {
+            const location = useLocation();
+            const { theme, toggleTheme } = useThemeStore();
+            const { sidebarOpen, closeSidebar } = useUIStore();
+            const [openMenus, setOpenMenus] = useState({});
+
+            // Auto-expand submenu for current route
+            useEffect(() => {
+                const initial = {};
+                menuItems.forEach(item => {
+                    if (item.submenu && item.submenu.some(sub => location.pathname.startsWith(sub.path))) {
+                        initial[item.label] = true;
+                    }
+                });
+                setOpenMenus(initial);
+            }, [location.pathname]);
+
+            const toggleSubmenu = (label) => {
+                setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }));
+            };
+
+            const handleNav = () => { closeSidebar(); };
+
+            const isParentActive = (item) => {
+                if (item.path && location.pathname === item.path) return true;
+                if (item.submenu) return item.submenu.some(sub => location.pathname.startsWith(sub.path));
+                return false;
+            };
+
+            const renderMenuItem = (item) => {
+                const active = isParentActive(item);
+                const hasSubmenu = item.submenu && item.submenu.length > 0;
+                const isOpen = !!openMenus[item.label];
+
+                return (
+                    <div key={item.label} className={`menu-item ${active ? 'active' : ''} ${isOpen ? 'submenu-open' : ''}`}>
+                        {hasSubmenu ? (
+                            <button className="menu-item-btn" onClick={() => toggleSubmenu(item.label)}>
+                                <i className={`fa-solid ${item.icon} menu-icon`}></i>
+                                <span className="menu-label">{item.label}</span>
+                                <i className="fa-solid fa-chevron-right menu-chevron"></i>
+                            </button>
+                        ) : (
+                            <Link to={item.path} className="menu-item-btn" onClick={handleNav}>
+                                <i className={`fa-solid ${item.icon} menu-icon`}></i>
+                                <span className="menu-label">{item.label}</span>
+                            </Link>
+                        )}
+                        {hasSubmenu && (
+                            <div className={`submenu ${isOpen ? 'open' : ''}`}>
+                                {item.submenu.map(sub => (
+                                    <Link
+                                        key={sub.path}
+                                        to={sub.path}
+                                        className={`submenu-item ${location.pathname === sub.path ? 'active' : ''}`}
+                                        onClick={handleNav}
+                                    >
+                                        {sub.label}
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`} role="navigation" aria-label="Main navigation">
+                    <div className="sidebar-header">
+                        <div className="sidebar-logo">
+                            <div className="sidebar-logo-icon"><i className="fa-solid fa-bolt"></i></div>
+                            <div className="sidebar-logo-text">otelexi<span>.</span></div>
+                        </div>
+                        <button className="sidebar-theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+                            <i className={`fa-solid ${theme === 'light' ? 'fa-moon' : 'fa-sun'}`}></i>
+                        </button>
+                    </div>
+                    <nav className="sidebar-nav">
+                        <div className="sidebar-section-label">Main</div>
+                        {menuItems.slice(0, 4).map(renderMenuItem)}
+                        <div className="sidebar-section-label">System</div>
+                        {menuItems.slice(4).map(renderMenuItem)}
+                    </nav>
+                </aside>
+            );
+        }
+
+        // ── Header ──
+        function Header() {
+            const { user } = useAuthStore();
+            const { sidebarOpen, toggleSidebar, userDropdownOpen, toggleUserDropdown, closeUserDropdown } = useUIStore();
+            const location = useLocation();
+            const dropdownRef = useRef(null);
+
+            // Close dropdown on outside click
+            useEffect(() => {
+                function handleClick(e) {
+                    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                        closeUserDropdown();
+                    }
+                }
+                document.addEventListener('mousedown', handleClick);
+                return () => document.removeEventListener('mousedown', handleClick);
+            }, [closeUserDropdown]);
+
+            const pageTitle = (() => {
+                const path = location.pathname;
+                for (const item of menuItems) {
+                    if (item.path && path === item.path) return item.label;
+                    if (item.submenu) {
+                        for (const sub of item.submenu) {
+                            if (path === sub.path) return sub.label;
+                        }
+                    }
+                }
+                if (path === '/profile') return 'Profile';
+                return 'Dashboard';
+            })();
+
+            return (
+                <header className="app-header">
+                    <div className="header-left">
+                        <button className="hamburger-btn" onClick={toggleSidebar} aria-label="Toggle sidebar">
+                            <i className={`fa-solid ${sidebarOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
+                        </button>
+                        <h1 className="header-page-title">{pageTitle}</h1>
+                    </div>
+                    <div className="header-right">
+                        <button className="header-icon-btn" aria-label="Search">
+                            <i className="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                        <button className="header-icon-btn" aria-label="Notifications">
+                            <i className="fa-solid fa-bell"></i>
+                            <span className="notif-dot"></span>
+                        </button>
+                        <div ref={dropdownRef} style={{ position: 'relative' }}>
+                            <button className="user-btn" onClick={toggleUserDropdown} aria-label="User menu" aria-expanded={userDropdownOpen}>
+                                <div className="user-avatar">{user ? getInitials(user.name) : '??'}</div>
+                                <div className="user-btn-info">
+                                    <span className="user-btn-name">{user ? user.name : 'User'}</span>
+                                    <span className="user-btn-role">{user ? user.role : ''}</span>
+                                </div>
+                                <i className="fa-solid fa-chevron-down" style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '4px' }}></i>
+                            </button>
+                            <div className={`user-dropdown ${userDropdownOpen ? 'open' : ''}`}>
+                                <Link to="/profile" className="dropdown-item" onClick={closeUserDropdown}>
+                                    <i className="fa-solid fa-user"></i> Profile
+                                </Link>
+                                <Link to="/settings" className="dropdown-item" onClick={closeUserDropdown}>
+                                    <i className="fa-solid fa-gear"></i> Settings
+                                </Link>
+                                <div className="dropdown-divider"></div>
+                                <button className="dropdown-item danger" onClick={() => {
+                                    closeUserDropdown();
+                                    useAuthStore.getState().logout();
+                                    useAlertStore.getState().addAlert('You have been logged out successfully.', 'info');
+                                    window.location.href = '/login';
+                                }}>
+                                    <i className="fa-solid fa-right-from-bracket"></i> Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+
+        // ── Layout (Sidebar + Header + Content) ──
+        function Layout() {
+            const navigate = useNavigate();
+            const { checkExpiration } = useAuthStore();
+            const { addAlert } = useAlertStore();
+            const { sidebarOpen, closeSidebar } = useUIStore();
+
+            // Check token expiration every 30 seconds
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const expired = checkExpiration();
+                    if (expired) {
+                        addAlert('Your session has expired. Please sign in again.', 'warning');
+                        navigate('/login', { replace: true });
+                    }
+                }, 30000);
+                return () => clearInterval(interval);
+            }, [checkExpiration, addAlert, navigate]);
+
+            return (
+                <div className="app-layout">
+                    <Sidebar />
+                    <div className="sidebar-overlay" style={{ display: sidebarOpen ? 'block' : 'none' }}
+                         className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
+                         onClick={closeSidebar}></div>
+                    {/* Overlay needs inline style for display to work with state */}
+                    {sidebarOpen && <div className="sidebar-overlay active" onClick={closeSidebar}></div>}
+                    <div className="main-wrapper">
+                        <Header />
+                        <main className="main-content">
+                            <Outlet />
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ================================================================
+           PAGES
+           ================================================================ */
+
+        // ── Login Page ──
+        function LoginPage() {
+            const { isAuthenticated } = useAuthStore();
+            const { login } = useAuthStore();
+            const { addAlert } = useAlertStore();
+            const navigate = useNavigate();
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [errors, setErrors] = useState({});
+
+            if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+            const validate = () => {
+                const e = {};
+                if (!email.trim()) e.email = 'Email is required';
+                else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email address';
+                if (!password) e.password = 'Password is required';
+                else if (password.length < 6) e.password = 'Password must be at least 6 characters';
+                setErrors(e);
+                return Object.keys(e).length === 0;
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!validate()) return;
+                setLoading(true);
+                // Simulate API call
+                setTimeout(() => {
+                    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock.' + Date.now();
+                    // Token expires in 2 minutes for demo purposes — change 120000 to a larger value for production
+                    const expiresAt = Date.now() + 120000;
+                    const userName = email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    login(token, expiresAt, { name: userName, email, role: 'Admin' });
+                    addAlert('Login successful! Welcome back, ' + userName + '.', 'success');
+                    navigate('/dashboard', { replace: true });
+                    setLoading(false);
+                }, 1200);
+            };
+
+            return (
+                <div className="auth-page">
+                    <div className="auth-left">
+                        <div className="deco deco-1"></div>
+                        <div className="deco deco-2"></div>
+                        <div className="deco deco-3"></div>
+                        <div className="auth-brand">
+                            <div className="auth-brand-logo"><i className="fa-solid fa-bolt"></i></div>
+                            <h1>otelexi</h1>
+                            <p>Streamline your invoicing workflow with powerful tools designed for modern businesses.</p>
+                        </div>
+                        <div className="auth-features">
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-receipt"></i>
+                                <span>Create and manage invoices effortlessly</span>
+                            </div>
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-chart-pie"></i>
+                                <span>Real-time revenue analytics and insights</span>
+                            </div>
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-shield-halved"></i>
+                                <span>Secure data with role-based access control</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="auth-right">
+                        <div className="auth-form-wrap fade-in-up">
+                            <div className="auth-form-header">
+                                <h2>Welcome back</h2>
+                                <p>Sign in to your account to continue</p>
+                            </div>
+                            <form className="auth-form" onSubmit={handleSubmit}>
+                                <div className="form-group">
+                                    <label className="form-label">Email Address</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" />
+                                        <i className="fa-solid fa-envelope"></i>
+                                    </div>
+                                    {errors.email && <div className="form-error">{errors.email}</div>}
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Password</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="password" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+                                        <i className="fa-solid fa-lock"></i>
+                                    </div>
+                                    {errors.password && <div className="form-error">{errors.password}</div>}
+                                </div>
+                                <div className="auth-remember">
+                                    <label><input type="checkbox" /> Remember me</label>
+                                    <a href="#">Forgot password?</a>
+                                </div>
+                                <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+                                    {loading ? <span className="spinner"></span> : <><i className="fa-solid fa-right-to-bracket"></i> Sign In</>}
+                                </button>
+                            </form>
+                            <div className="auth-form-footer">
+                                Don't have an account? <Link to="/register">Create account</Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Register Page ──
+        function RegisterPage() {
+            const { isAuthenticated } = useAuthStore();
+            const { addAlert } = useAlertStore();
+            const navigate = useNavigate();
+            const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', terms: false });
+            const [loading, setLoading] = useState(false);
+            const [errors, setErrors] = useState({});
+
+            if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+            const update = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+            const validate = () => {
+                const e = {};
+                if (!form.name.trim()) e.name = 'Full name is required';
+                if (!form.email.trim()) e.email = 'Email is required';
+                else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address';
+                if (!form.password) e.password = 'Password is required';
+                else if (form.password.length < 6) e.password = 'Password must be at least 6 characters';
+                if (form.password !== form.confirm) e.confirm = 'Passwords do not match';
+                if (!form.terms) e.terms = 'You must accept the terms';
+                setErrors(e);
+                return Object.keys(e).length === 0;
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!validate()) return;
+                setLoading(true);
+                setTimeout(() => {
+                    addAlert('Account created successfully! Please sign in to get started.', 'success');
+                    navigate('/login', { replace: true });
+                    setLoading(false);
+                }, 1200);
+            };
+
+            return (
+                <div className="auth-page">
+                    <div className="auth-left">
+                        <div className="deco deco-1"></div>
+                        <div className="deco deco-2"></div>
+                        <div className="deco deco-3"></div>
+                        <div className="auth-brand">
+                            <div className="auth-brand-logo"><i className="fa-solid fa-bolt"></i></div>
+                            <h1>otelexi</h1>
+                            <p>Join thousands of businesses that trust Otelexi for their invoicing needs.</p>
+                        </div>
+                        <div className="auth-features">
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-rocket"></i>
+                                <span>Get started in under 2 minutes</span>
+                            </div>
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-palette"></i>
+                                <span>Customize invoices with your branding</span>
+                            </div>
+                            <div className="auth-feature">
+                                <i className="fa-solid fa-globe"></i>
+                                <span>Multi-currency and multi-language support</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="auth-right">
+                        <div className="auth-form-wrap fade-in-up">
+                            <div className="auth-form-header">
+                                <h2>Create account</h2>
+                                <p>Join Otelexi Invoicing today</p>
+                            </div>
+                            <form className="auth-form" onSubmit={handleSubmit}>
+                                <div className="form-group">
+                                    <label className="form-label">Full Name</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="text" placeholder="John Doe" value={form.name} onChange={e => update('name', e.target.value)} autoComplete="name" />
+                                        <i className="fa-solid fa-user"></i>
+                                    </div>
+                                    {errors.name && <div className="form-error">{errors.name}</div>}
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Email Address</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="email" placeholder="you@example.com" value={form.email} onChange={e => update('email', e.target.value)} autoComplete="email" />
+                                        <i className="fa-solid fa-envelope"></i>
+                                    </div>
+                                    {errors.email && <div className="form-error">{errors.email}</div>}
+                                </div>
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label className="form-label">Password</label>
+                                        <div className="form-input-wrap">
+                                            <input className="form-input" type="password" placeholder="Min. 6 characters" value={form.password} onChange={e => update('password', e.target.value)} autoComplete="new-password" />
+                                            <i className="fa-solid fa-lock"></i>
+                                        </div>
+                                        {errors.password && <div className="form-error">{errors.password}</div>}
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Confirm Password</label>
+                                        <div className="form-input-wrap">
+                                            <input className="form-input" type="password" placeholder="Re-enter password" value={form.confirm} onChange={e => update('confirm', e.target.value)} autoComplete="new-password" />
+                                            <i className="fa-solid fa-lock"></i>
+                                        </div>
+                                        {errors.confirm && <div className="form-error">{errors.confirm}</div>}
+                                    </div>
+                                </div>
+                                <div className="auth-terms">
+                                    <label>
+                                        <input type="checkbox" checked={form.terms} onChange={e => update('terms', e.target.checked)} />
+                                        <span>I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></span>
+                                    </label>
+                                </div>
+                                {errors.terms && <div className="form-error">{errors.terms}</div>}
+                                <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ marginTop: '8px' }}>
+                                    {loading ? <span className="spinner"></span> : <><i className="fa-solid fa-user-plus"></i> Create Account</>}
+                                </button>
+                            </form>
+                            <div className="auth-form-footer">
+                                Already have an account? <Link to="/login">Sign in</Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Dashboard Page ──
+        function DashboardPage() {
+            const { user } = useAuthStore();
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            return (
+                <div className="fade-in-up">
+                    <div className="dashboard-welcome">
+                        <h1>Welcome back, {user ? user.name : 'User'}</h1>
+                        <p>{dateStr} — Here's what's happening with your invoices today.</p>
+                    </div>
+
+                    <div className="stats-grid">
+                        {dashboardStats.map((stat, i) => (
+                            <div key={i} className="stat-card">
+                                <div className={`stat-icon ${stat.color}`}>
+                                    <i className={`fa-solid ${stat.icon}`}></i>
+                                </div>
+                                <div className="stat-info">
+                                    <div className="stat-label">{stat.label}</div>
+                                    <div className="stat-value">{stat.value}</div>
+                                    <span className={`stat-change ${stat.up ? 'up' : 'down'}`}>
+                                        <i className={`fa-solid fa-arrow-${stat.up ? 'up' : 'down'}`} style={{ fontSize: '10px' }}></i>
+                                        {stat.change}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="dashboard-grid">
+                        <div className="card">
+                            <div className="card-header">
+                                <h3>Recent Invoices</h3>
+                                <Link to="/invoice" className="btn btn-ghost btn-sm">
+                                    View All <i className="fa-solid fa-arrow-right" style={{ fontSize: '11px' }}></i>
+                                </Link>
+                            </div>
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice</th>
+                                            <th>Client</th>
+                                            <th>Amount</th>
+                                            <th>Status</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sampleInvoices.slice(0, 5).map(inv => (
+                                            <tr key={inv.id}>
+                                                <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.id}</td>
+                                                <td>{inv.client}</td>
+                                                <td style={{ fontWeight: 600 }}>{formatCurrency(inv.amount)}</td>
+                                                <td><span className={`badge badge-${inv.status}`}>{inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}</span></td>
+                                                <td>{formatDate(inv.date)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="card">
+                            <div className="card-header">
+                                <h3>Quick Actions</h3>
+                            </div>
+                            <div className="card-body">
+                                <div className="quick-actions">
+                                    <button className="quick-action-btn" onClick={() => useAlertStore.getState().addAlert('Redirecting to invoice creation...', 'info')}>
+                                        <i className="fa-solid fa-plus"></i>
+                                        New Invoice
+                                    </button>
+                                    <button className="quick-action-btn" onClick={() => useAlertStore.getState().addAlert('Redirecting to quotation creation...', 'info')}>
+                                        <i className="fa-solid fa-file-circle-plus"></i>
+                                        New Quotation
+                                    </button>
+                                    <button className="quick-action-btn" onClick={() => useAlertStore.getState().addAlert('Opening client directory...', 'info')}>
+                                        <i className="fa-solid fa-user-plus"></i>
+                                        Add Client
+                                    </button>
+                                    <button className="quick-action-btn" onClick={() => useAlertStore.getState().addAlert('Opening reports...', 'info')}>
+                                        <i className="fa-solid fa-chart-bar"></i>
+                                        View Reports
+                                    </button>
+                                </div>
+
+                                <div style={{ marginTop: '24px' }}>
+                                    <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '14px' }}>Recent Activity</h4>
+                                    {[
+                                        { icon: 'fa-check', color: 'var(--success)', text: 'Invoice INV-2024-005 paid by Pinnacle Group', time: '2 hours ago' },
+                                        { icon: 'fa-paper-plane', color: 'var(--info)', text: 'Quotation QUO-2024-002 sent to NewWave Tech', time: '5 hours ago' },
+                                        { icon: 'fa-plus', color: 'var(--accent)', text: 'Invoice INV-2024-007 created', time: 'Yesterday' },
+                                        { icon: 'fa-triangle-exclamation', color: 'var(--warning)', text: 'Invoice INV-2024-003 is now overdue', time: '2 days ago' },
+                                    ].map((act, i) => (
+                                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 0', borderBottom: i < 3 ? '1px solid var(--border-color)' : 'none' }}>
+                                            <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                <i className={`fa-solid ${act.icon}`} style={{ fontSize: '12px', color: act.color }}></i>
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{act.text}</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{act.time}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Invoice Page ──
+        function InvoicePage() {
+            const location = useLocation();
+            const { addAlert } = useAlertStore();
+            const pageTitle = location.pathname === '/invoice/create' ? 'Create Invoice'
+                : location.pathname === '/invoice/drafts' ? 'Draft Invoices'
+                : 'All Invoices';
+            const filteredData = location.pathname === '/invoice/drafts'
+                ? sampleInvoices.filter(i => i.status === 'draft')
+                : sampleInvoices;
+
+            return (
+                <div className="fade-in-up">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                        <div>
+                            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{pageTitle}</h2>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{filteredData.length} invoice{filteredData.length !== 1 ? 's' : ''} found</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => addAlert('Opening invoice creation form...', 'info')}>
+                            <i className="fa-solid fa-plus"></i> New Invoice
+                        </button>
+                    </div>
+                    <div className="card">
+                        <div className="table-wrapper">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice</th>
+                                        <th>Client</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredData.map(inv => (
+                                        <tr key={inv.id}>
+                                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.id}</td>
+                                            <td>{inv.client}</td>
+                                            <td style={{ fontWeight: 600 }}>{formatCurrency(inv.amount)}</td>
+                                            <td><span className={`badge badge-${inv.status}`}>{inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}</span></td>
+                                            <td>{formatDate(inv.date)}</td>
+                                            <td>
+                                                <div className="table-actions">
+                                                    <button className="table-action-btn" title="View" onClick={() => addAlert('Viewing ' + inv.id, 'info')}><i className="fa-solid fa-eye"></i></button>
+                                                    <button className="table-action-btn" title="Edit" onClick={() => addAlert('Editing ' + inv.id, 'info')}><i className="fa-solid fa-pen"></i></button>
+                                                    <button className="table-action-btn danger" title="Delete" onClick={() => addAlert(inv.id + ' has been deleted.', 'error')}><i className="fa-solid fa-trash"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Quotation Page ──
+        function QuotationPage() {
+            const location = useLocation();
+            const { addAlert } = useAlertStore();
+            const pageTitle = location.pathname === '/quotation/create' ? 'Create Quotation'
+                : location.pathname === '/quotation/pending' ? 'Pending Quotations'
+                : 'All Quotations';
+            const filteredData = location.pathname === '/quotation/pending'
+                ? sampleQuotations.filter(q => q.status === 'pending')
+                : sampleQuotations;
+
+            return (
+                <div className="fade-in-up">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                        <div>
+                            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{pageTitle}</h2>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{filteredData.length} quotation{filteredData.length !== 1 ? 's' : ''} found</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => addAlert('Opening quotation creation form...', 'info')}>
+                            <i className="fa-solid fa-plus"></i> New Quotation
+                        </button>
+                    </div>
+                    <div className="card">
+                        <div className="table-wrapper">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Quotation</th>
+                                        <th>Client</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Valid Until</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredData.map(q => (
+                                        <tr key={q.id}>
+                                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{q.id}</td>
+                                            <td>{q.client}</td>
+                                            <td style={{ fontWeight: 600 }}>{formatCurrency(q.amount)}</td>
+                                            <td><span className={`badge badge-${q.status}`}>{q.status.charAt(0).toUpperCase() + q.status.slice(1)}</span></td>
+                                            <td>{formatDate(q.validUntil)}</td>
+                                            <td>
+                                                <div className="table-actions">
+                                                    <button className="table-action-btn" title="View" onClick={() => addAlert('Viewing ' + q.id, 'info')}><i className="fa-solid fa-eye"></i></button>
+                                                    <button className="table-action-btn" title="Edit" onClick={() => addAlert('Editing ' + q.id, 'info')}><i className="fa-solid fa-pen"></i></button>
+                                                    <button className="table-action-btn danger" title="Delete" onClick={() => addAlert(q.id + ' has been deleted.', 'error')}><i className="fa-solid fa-trash"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── Users Page ──
+        function UsersPage() {
+            const location = useLocation();
+            const { addAlert } = useAlertStore();
+            const pageTitle = location.pathname === '/users/add' ? 'Add User'
+                : location.pathname === '/users/roles' ? 'Roles & Permissions'
+                : 'All Users';
+
+            if (location.pathname === '/users/add') {
+                return (
+                    <div className="fade-in-up">
+                        <div style={{ marginBottom: '24px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Add New User</h2>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>Fill in the details below to create a new user account</p>
+                        </div>
+                        <div className="card" style={{ maxWidth: '600px' }}>
+                            <div className="card-body">
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label className="form-label">First Name</label>
+                                        <div className="form-input-wrap">
+                                            <input className="form-input" type="text" placeholder="John" />
+                                            <i className="fa-solid fa-user"></i>
+                                        </div>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Last Name</label>
+                                        <div className="form-input-wrap">
+                                            <input className="form-input" type="text" placeholder="Doe" />
+                                            <i className="fa-solid fa-user"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Email Address</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="email" placeholder="john@company.com" />
+                                        <i className="fa-solid fa-envelope"></i>
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Role</label>
+                                    <div className="form-input-wrap">
+                                        <select className="form-input no-icon" style={{ cursor: 'pointer' }}>
+                                            <option>Viewer</option>
+                                            <option>Manager</option>
+                                            <option>Admin</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Password</label>
+                                    <div className="form-input-wrap">
+                                        <input className="form-input" type="password" placeholder="Min. 6 characters" />
+                                        <i className="fa-solid fa-lock"></i>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                                    <button className="btn btn-primary" onClick={() => addAlert('User has been created successfully!', 'success')}>
+                                        <i className="fa-solid
