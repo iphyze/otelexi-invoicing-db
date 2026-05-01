@@ -4,6 +4,8 @@ require 'vendor/autoload.php';
 require_once 'includes/connection.php';
 require_once 'includes/authMiddleware.php';
 
+use Dotenv\Dotenv;
+
 /**
  * POST /settings/upload-logo
  * Upload company logo image. Returns logo_path.
@@ -32,6 +34,9 @@ if ($userData['role'] !== 'admin') {
 }
 
 
+$dotenv = Dotenv::createImmutable('./');
+$dotenv->load();
+
 // -------------------------------------------------------
 // Configuration
 // -------------------------------------------------------
@@ -39,10 +44,12 @@ if ($userData['role'] !== 'admin') {
  $allowedMimeTypes = ['image/jpeg', 'image/png'];
  $allowedExtensions = ['jpg', 'jpeg', 'png'];
 
+ $upload_domain =  $_ENV["UPLOAD"];
+
 // Define paths 
 // Goes up 3 levels from /api/routes/settings/ to reach /otelex-server/
  $uploadDir = __DIR__ . '/../../../uploads/logos/'; 
- $baseUrlPath = '/uploads/logos/'; // What the frontend will use to access the image
+ $baseUrlPath = $upload_domain . '/uploads/logos/'; // What the frontend will use to access the image
 
 try {
     // 1. Check if file was sent
