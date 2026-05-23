@@ -2,12 +2,13 @@
 // routes/payments/getSinglePayment.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/receipt.php';
 
 /**
  * GET /payments/{id}
  * Fetch a single payment with full invoice and client context.
  * Sales can only view payments on their own invoices.
- * Roles allowed: Admin, Accountant, Sales
+ * Roles allowed: Admin, Accounting, Sales
  *
  * Query param: ?id=12
  */
@@ -23,7 +24,7 @@ try {
     $loggedInUserId   = (int)$userData['id'];
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'accountant', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'accounting', 'sales'])) {
         throw new Exception("Unauthorized: You do not have permission to view payments.", 403);
     }
 
@@ -49,11 +50,13 @@ try {
             i.payment_terms, i.created_by AS invoice_created_by,
             c.id AS client_id, c.company_name AS client_name,
             c.email AS client_email, c.phone AS client_phone,
-            c.billing_address AS client_address
+            c.billing_address AS client_address,
+            r.id AS receipt_id
         FROM payments p
         JOIN invoices i ON i.id = p.invoice_id
         JOIN clients  c ON c.id = i.client_id
         LEFT JOIN users u ON u.id = p.recorded_by
+        LEFT JOIN payment_receipts r ON r.payment_id = p.id
         WHERE p.id = ?
         LIMIT 1
     ");
@@ -72,6 +75,8 @@ try {
     if ($loggedInUserRole === 'sales' && (int)$row['invoice_created_by'] !== $loggedInUserId) {
         throw new Exception("Unauthorized: You do not have permission to view this payment.", 403);
     }
+
+    $receipt = $row['receipt_id'] ? fetchReceiptById($conn, (int) $row['receipt_id']) : null;
 
     // -------------------------------------------------------
     // 2. Return response
@@ -92,6 +97,7 @@ try {
                 "name" => $row['recorded_by_name']
             ],
             "created_at"     => $row['created_at'],
+            "receipt"        => $receipt ? receiptResponseData($receipt) : null,
             "invoice"        => [
                 "id"             => (int)$row['invoice_id'],
                 "invoice_number" => $row['invoice_number'],

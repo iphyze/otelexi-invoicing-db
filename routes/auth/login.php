@@ -1,138 +1,126 @@
 <?php
 
-require 'vendor/autoload.php';
-require_once 'includes/connection.php';
+declare(strict_types=1);
 
-use Firebase\JWT\JWT;
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../includes/connection.php';
+require_once __DIR__ . '/../../includes/security.php';
+
 use Respect\Validation\Validator as v;
-use Dotenv\Dotenv;
-
-header('Content-Type: application/json');
 
 try {
-    // Load environment variables
-    $dotenv = Dotenv::createImmutable('./');
-    $dotenv->load();
-
-    // Ensure the request method is POST
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        throw new Exception("Bad Request: Only POST method is allowed", 400);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        throw new Exception('Method Not Allowed.', 405);
     }
 
-    // Get the JSON input
-    $data = json_decode(file_get_contents("php://input"));
-
-    if (!isset($data->email) || !isset($data->password)) {
-        throw new Exception("Email and Password are required", 400);
+    $data = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($data) || !isset($data['email'], $data['password'])) {
+        throw new Exception('Email and password are required.', 400);
     }
 
-    $email = trim($data->email);
-    $password = trim($data->password);
+    $email = strtolower(trim((string) $data['email']));
+    $password = (string) $data['password'];
 
-    // Define validators
-    $emailValidator = v::email()->notEmpty();
-
-    // Validate email
-    if (!$emailValidator->validate($email)) {
-        throw new Exception("Invalid email format", 400);
+    if (!v::email()->validate($email) || $password === '') {
+        throw new Exception('Invalid email or password.', 401);
     }
 
-    // Validate password length and special character
-    if (!v::stringType()->length(8, null)->validate($password)) {
-        throw new Exception("Password must be at least 8 characters long", 400);
+    $identifierHash = hash('sha256', $email);
+    $ipAddress = clientIpAddress();
+    $windowMinutes = max(1, (int) (config('LOGIN_RATE_WINDOW_MINUTES', '15') ?? '15'));
+    $maxAttempts = max(1, (int) (config('LOGIN_MAX_ATTEMPTS', '5') ?? '5'));
+    $cutoff = date('Y-m-d H:i:s', time() - ($windowMinutes * 60));
+
+    $cleanup = $conn->prepare('DELETE FROM auth_login_attempts WHERE attempted_at < DATE_SUB(NOW(), INTERVAL 1 DAY)');
+    $cleanup->execute();
+    $cleanup->close();
+
+    $attemptStmt = $conn->prepare(
+        'SELECT COUNT(*) AS failed_attempts FROM auth_login_attempts WHERE identifier_hash = ? AND ip_address = ? AND success = 0 AND attempted_at >= ?'
+    );
+    $attemptStmt->bind_param('sss', $identifierHash, $ipAddress, $cutoff);
+    $attemptStmt->execute();
+    $failedAttempts = (int) ($attemptStmt->get_result()->fetch_assoc()['failed_attempts'] ?? 0);
+    $attemptStmt->close();
+
+    if ($failedAttempts >= $maxAttempts) {
+        throw new Exception('Too many failed sign-in attempts. Please try again later.', 429);
     }
 
-    if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
-        throw new Exception("Password must contain at least one special character (e.g. @, _, /, #)", 400);
-    }
-
-    // Query database — use prepared statement directly, no mysqli_real_escape_string needed
-    $sql = "SELECT * FROM users WHERE email = ?";
-    $stmt = $conn->prepare($sql);
-
-    if (!$stmt) {
-        throw new Exception("Database query preparation failed: " . $conn->error, 500);
-    }
-
-    $stmt->bind_param("s", $email);
+    $stmt = $conn->prepare(
+        'SELECT id, name, email, password, role, is_active, auth_version, last_login, created_at, updated_at FROM users WHERE email = ? LIMIT 1'
+    );
+    $stmt->bind_param('s', $email);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
-    if (!$result) {
-        throw new Exception("Database execution error: " . $stmt->error, 500);
+    $authenticated = $user && (int) $user['is_active'] === 1 && password_verify($password, $user['password']);
+    if (!$authenticated) {
+        $failed = $conn->prepare(
+            'INSERT INTO auth_login_attempts (identifier_hash, ip_address, success) VALUES (?, ?, 0)'
+        );
+        $failed->bind_param('ss', $identifierHash, $ipAddress);
+        $failed->execute();
+        $failed->close();
+
+        throw new Exception('Invalid email or password.', 401);
     }
 
-    if ($result->num_rows === 0) {
-        throw new Exception("Invalid email or password", 401);
+    $clearAttempts = $conn->prepare('DELETE FROM auth_login_attempts WHERE identifier_hash = ? AND ip_address = ?');
+    $clearAttempts->bind_param('ss', $identifierHash, $ipAddress);
+    $clearAttempts->execute();
+    $clearAttempts->close();
+
+    $conn->begin_transaction();
+    try {
+        $updateLogin = $conn->prepare('UPDATE users SET last_login = NOW() WHERE id = ?');
+        $updateLogin->bind_param('i', $user['id']);
+        $updateLogin->execute();
+        $updateLogin->close();
+
+        $csrfToken = randomUrlSafeToken(32);
+        $refreshToken = createRefreshSession($conn, (int) $user['id'], $csrfToken);
+        $accessToken = buildAccessToken($user);
+
+        $log = $conn->prepare(
+            'INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address) VALUES (?, ?, ?, ?, ?, ?)'
+        );
+        $action = 'auth.login';
+        $modelType = 'User';
+        $modelId = (int) $user['id'];
+        $description = $user['name'] . ' logged in successfully';
+        $log->bind_param('ississ', $user['id'], $action, $modelType, $modelId, $description, $ipAddress);
+        $log->execute();
+        $log->close();
+
+        $conn->commit();
+    } catch (Throwable $e) {
+        $conn->rollback();
+        throw $e;
     }
 
-    $user = $result->fetch_assoc();
+    issueAuthCookies($accessToken, $refreshToken, $csrfToken);
+    $user['last_login'] = date('Y-m-d H:i:s');
 
-    // Check if account is active
-    if ((int)$user['is_active'] !== 1) {
-        throw new Exception("Account has been deactivated. Contact the administrator.", 403);
-    }
-
-    // Verify password
-    if (!password_verify($password, $user['password'])) {
-        throw new Exception("Invalid email or password", 401);
-    }
-
-    // Generate JWT
-    $secretKey = $_ENV["JWT_SECRET"] ?: "otelex_secret_key";
-    $expiresIn = (int)($_ENV["JWT_EXPIRES_IN"] ?: 432000);
-
-    $tokenPayload = [
-        "id"    => (int)$user['id'],
-        "email" => $user['email'],
-        "role"  => $user['role'],
-        "exp"   => time() + $expiresIn
-    ];
-
-    $token = JWT::encode($tokenPayload, $secretKey, 'HS256');
-
-    // Update last_login
-    $updateLogin = "UPDATE users SET last_login = NOW() WHERE id = ?";
-    $stmt = $conn->prepare($updateLogin);
-    if ($stmt) {
-        $stmt->bind_param("i", $user['id']);
-        $stmt->execute();
-    }
-
-    // Log to activity_log
-    $logSql = "INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address) VALUES (?, ?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($logSql);
-    if ($stmt) {
-        $action      = "auth.login";
-        $modelType   = "User";
-        $modelId     = (int)$user['id'];
-        $description = $user['name'] . " logged in successfully";
-        $ipAddress   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-
-        $stmt->bind_param("ississ", $user['id'], $action, $modelType, $modelId, $description, $ipAddress);
-        $stmt->execute();
-    }
-
-    http_response_code(200);
-    echo json_encode([
-        "status"  => "success",
-        "message" => "Login successful",
-        "data"    => [
-            "id"         => (int)$user['id'],
-            "name"       => $user['name'],
-            "email"      => $user['email'],
-            "role"       => $user['role'],
-            "token"      => $token,
-            "expires_in" => $expiresIn
-        ]
+    jsonSuccess([
+        'status'  => 'success',
+        'message' => 'Login successful.',
+        'data'    => [
+            'user'       => publicUserData($user),
+            'csrf_token' => $csrfToken,
+        ],
     ]);
+} catch (Throwable $e) {
+    $code = (int) $e->getCode();
+    if ($code < 400 || $code > 599) {
+        $code = 500;
+    }
 
-} catch (Exception $e) {
-    http_response_code($e->getCode() ?: 500);
+    error_log('Login Error: ' . $e->getMessage());
+    http_response_code($code);
     echo json_encode([
-        "status"  => "failed",
-        "message" => $e->getMessage()
+        'status'  => 'failed',
+        'message' => $code >= 500 ? 'Unable to sign in at this time.' : $e->getMessage(),
     ]);
 }
-
-?>

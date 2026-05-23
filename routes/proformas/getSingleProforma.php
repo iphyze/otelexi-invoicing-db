@@ -22,7 +22,7 @@ try {
     $loggedInUserId   = (int)$userData['id'];
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: You do not have permission to view proforma invoices.", 403);
     }
 

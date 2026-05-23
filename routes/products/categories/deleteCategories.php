@@ -24,8 +24,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin can delete categories
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can delete product categories.", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can delete product categories.", 403);
     }
 
     // Decode request body

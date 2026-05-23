@@ -16,8 +16,8 @@ try {
     $loggedInUserRole = $userData['role'];
 
     // Only Admin allowed
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can access this resource", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can access this resource", 403);
     }
 
     // Pagination setup (optional, with defaults)
@@ -30,10 +30,10 @@ try {
 
     // Role filter (optional)
     $roleFilter = isset($_GET['role']) ? trim($_GET['role']) : null;
-    $allowedRoles = ['admin', 'sales', 'accountant'];
+    $allowedRoles = ['super_admin', 'admin', 'sales', 'accounting'];
 
     if ($roleFilter && !in_array($roleFilter, $allowedRoles)) {
-        throw new Exception("Invalid role filter. Allowed: admin, sales, accountant", 400);
+        throw new Exception("Invalid role filter. Allowed: super_admin, admin, sales, accounting", 400);
     }
 
     // Sorting setup

@@ -20,7 +20,7 @@ try {
     $targetUserId = isset($_GET['id']) ? (int)$_GET['id'] : $loggedInUserId;
 
     // Authorization: Only Admin or the actual user can view this profile
-    if ($loggedInUserRole !== 'admin' && $targetUserId !== $loggedInUserId) {
+    if ($loggedInUserRole !== 'super_admin' && $targetUserId !== $loggedInUserId) {
         throw new Exception("Unauthorized: You can only view your own profile", 403);
     }
 

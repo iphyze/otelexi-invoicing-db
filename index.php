@@ -1,25 +1,16 @@
 <?php
 
 require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/includes/security.php';
 
-// Set CORS headers
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Max-Age: 86400");
-header("Content-Type: application/json");
+loadEnvironment();
+applyApiSecurityHeaders();
 
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
-include_once('includes/connection.php');
+require_once __DIR__ . '/includes/connection.php';
 
 // Normalize request URI
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$basePath = '/otelex-server/api';
+$basePath = apiBasePath();
 $relativePath = str_replace($basePath, '', $requestUri);
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -36,8 +27,13 @@ $routes = [
     // --------------------------------------------------------
     // AUTH
     // --------------------------------------------------------
+    'GET /auth/csrf'      => 'routes/auth/csrf.php',
+    'GET /auth/session'   => 'routes/auth/session.php',
     'POST /auth/login'    => 'routes/auth/login.php',
-    'POST /auth/register' => 'routes/auth/register.php',
+    'POST /auth/refresh'  => 'routes/auth/refresh.php',
+    'POST /auth/logout'   => 'routes/auth/logout.php',
+    'POST /auth/forgot-password' => 'routes/auth/forgotPassword.php',
+    'POST /auth/reset-password'  => 'routes/auth/resetPassword.php',
 
     // --------------------------------------------------------
     // USERS
@@ -146,12 +142,34 @@ $routes = [
     'POST /invoices/{id}/finalize'       => 'routes/invoices/finalizeInvoice.php',
     'POST /invoices/{id}/cancel'         => 'routes/invoices/cancelInvoice.php',
     'POST /invoices/mark-overdue'        => 'routes/invoices/markOverdue.php',
+    'POST /invoices/{id}/send'            => 'routes/invoices/sendInvoice.php',
+    'POST /invoices/{id}/send-reminder'   => 'routes/invoices/sendOverdueReminder.php',
+    'POST /invoices/{id}/credit-notes'     => 'routes/invoices/createCreditNote.php',
+    'POST /invoices/{id}/reverse'          => 'routes/invoices/reverseInvoice.php',
+    'POST /credit-notes/{id}/refunds'      => 'routes/creditNotes/processRefund.php',
+    'POST /credit-notes/{id}/send'         => 'routes/creditNotes/sendCreditNote.php',
+
+    // Document email history
+    'GET /documents/{id}/email-history' => 'routes/documents/getEmailHistory.php',
+
+    // Inventory control and stock movement history
+    'GET /inventory/movements'       => 'routes/inventory/getStockMovements.php',
+    'POST /inventory/adjustments'    => 'routes/inventory/adjustStock.php',
+
+    // Administration and audit controls (Super Admin only)
+    'GET /admin/audit-logs'          => 'routes/admin/getAuditLogs.php',
+    'GET /admin/overview'            => 'routes/admin/getAdministrationOverview.php',
 
     // Payments
     'GET /payments'               => 'routes/payments/getPayments.php',
     'GET /payments/{id}'          => 'routes/payments/getSinglePayment.php',
     'POST /payments/record'       => 'routes/payments/recordPayment.php',
+    'POST /payments/{id}/receipt' => 'routes/receipts/issueReceipt.php',
     'DELETE /payments/{id}/delete' => 'routes/payments/deletePayment.php',
+
+    // Payment receipts
+    'GET /receipts/{id}'          => 'routes/receipts/getReceipt.php',
+    'POST /receipts/{id}/send'    => 'routes/receipts/sendReceipt.php',
 
     // Reports
     'GET /reports/sales-summary'        => 'routes/reports/salesSummary.php',
@@ -164,9 +182,11 @@ $routes = [
     'GET /reports/revenue-by-category'  => 'routes/reports/revenueByCategory.php',
     'GET /reports/document-flow'        => 'routes/reports/documentFlow.php',
 
-    // Notification and Dashboard Routes
-    'GET /dashboard'                       => 'routes/dashboard/dashboard.php',
-    'GET /notifications'                   => 'routes/notifications/getNotifications.php',
+    // Dashboard, document maintenance and notifications
+    'GET /dashboard'                             => 'routes/dashboard/dashboard.php',
+    'GET /automation/document-maintenance/status' => 'routes/automation/getDocumentMaintenanceStatus.php',
+    'POST /automation/document-maintenance/run'   => 'routes/automation/runDocumentMaintenance.php',
+    'GET /notifications'                         => 'routes/notifications/getNotifications.php',
     'POST /notifications/mark-read'        => 'routes/notifications/markNotificationsRead.php',
 
 ];
@@ -255,13 +275,23 @@ try {
     http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code >= 500 ? "Internal server error." : $e->getMessage()
     ]);
     exit;
 }
 
 // Safety Net 3: Check if the included file outputted JSON properly
 $output = ob_get_clean();
+
+// Do not leak SQL paths, stack messages or infrastructure details from route-level errors.
+if (http_response_code() >= 500) {
+    error_log("Handler returned server error ({$routeKey}): " . substr($output, 0, 500));
+    echo json_encode([
+        "status"  => "failed",
+        "message" => "Internal server error."
+    ]);
+    exit;
+}
 
 // If output is empty, the route file likely handled its own response (normal case)
 if (empty($output)) {

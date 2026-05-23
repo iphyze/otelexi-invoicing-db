@@ -22,7 +22,7 @@ try {
     $loggedInUserRole = $userData['role'];
 
     // Only Admin and Sales can view quotation details
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: You do not have permission to view this quotation", 403);
     }
 

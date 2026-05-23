@@ -34,8 +34,8 @@ try {
     $loggedInUserRole  = $userData['role'];
     $loggedInUserEmail = $userData['email'];
 
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can cancel invoices.", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can cancel invoices.", 403);
     }
 
     if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {

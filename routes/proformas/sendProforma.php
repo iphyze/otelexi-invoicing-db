@@ -1,118 +1,174 @@
 <?php
 // routes/proformas/sendProforma.php
+// POST /proforma/{id}/send
+// Emails the frontend-generated proforma PDF and changes draft/rejected documents to sent.
+// Roles allowed: Admin; Sales may send proformas they created.
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/mailer.php';
+require_once __DIR__ . '/../../utils/emailTemplates.php';
+require_once __DIR__ . '/../../utils/documentEmail.php';
 
-/**
- * POST /proforma/{id}/send
- * Mark a draft proforma invoice as 'sent'.
- * Roles allowed: Admin, Sales (own only)
- *
- * Query param: ?id=5
- * No request body needed.
- */
+use Dotenv\Dotenv;
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');
 
 try {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        throw new Exception("Route not found", 400);
+    Dotenv::createImmutable(__DIR__ . '/../../')->safeLoad();
+
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        throw new Exception('Method Not Allowed', 405);
     }
 
-    $userData          = authenticateUser();
-    $loggedInUserId    = (int)$userData['id'];
-    $loggedInUserRole  = $userData['role'];
-    $loggedInUserEmail = $userData['email'];
+    $userData = authenticateUser();
+    $userId = (int) $userData['id'];
+    $role = (string) $userData['role'];
+    $senderEmail = (string) $userData['email'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
-        throw new Exception("Unauthorized: Only Admins or Sales staff can send proforma invoices.", 403);
+    if (!in_array($role, ['super_admin', 'admin', 'sales'], true)) {
+        throw new Exception('Unauthorized: Only Admins or Sales staff can send proformas.', 403);
     }
 
-    if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-        throw new Exception("A valid Proforma ID is required.", 400);
+    if (empty($_GET['id']) || !is_numeric($_GET['id'])) {
+        throw new Exception('A valid Proforma ID is required.', 400);
     }
-    $proformaId = (int)$_GET['id'];
 
-    // -------------------------------------------------------
-    // 1. Verify proforma exists and is draft
-    // -------------------------------------------------------
-    $checkStmt = $conn->prepare("
-        SELECT p.id, p.proforma_number, p.status, p.created_by,
-               p.issue_date, p.expiry_date, p.total_amount, p.currency,
-               c.company_name AS client_name
-        FROM proforma_invoices p
-        JOIN clients c ON c.id = p.client_id
-        WHERE p.id = ?
-        LIMIT 1
-    ");
-    $checkStmt->bind_param("i", $proformaId);
-    $checkStmt->execute();
-    $proforma = $checkStmt->get_result()->fetch_assoc();
-    $checkStmt->close();
+    $proformaId = (int) $_GET['id'];
+
+    $stmt = $conn->prepare(
+        'SELECT p.id, p.proforma_number, p.created_by, p.issue_date, p.expiry_date,
+                p.currency, p.total_amount, p.status, p.notes,
+                c.company_name AS client_name, c.email AS client_email
+         FROM proforma_invoices p
+         JOIN clients c ON c.id = p.client_id
+         WHERE p.id = ?
+         LIMIT 1'
+    );
+    $stmt->bind_param('i', $proformaId);
+    $stmt->execute();
+    $proforma = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
     if (!$proforma) {
-        throw new Exception("Proforma invoice not found.", 404);
-    }
-    if ($proforma['status'] !== 'draft') {
-        throw new Exception("Only draft proforma invoices can be sent. Current status: {$proforma['status']}.", 409);
-    }
-    if ($loggedInUserRole === 'sales' && (int)$proforma['created_by'] !== $loggedInUserId) {
-        throw new Exception("Unauthorized: You can only send your own proforma invoices.", 403);
+        throw new Exception('Proforma invoice not found.', 404);
     }
 
-    // -------------------------------------------------------
-    // 2. Update status
-    // -------------------------------------------------------
-    $conn->begin_transaction();
+    if ($role === 'sales' && (int) $proforma['created_by'] !== $userId) {
+        throw new Exception('Unauthorized: You can only send proformas you created.', 403);
+    }
+
+    $allowedStatuses = ['draft', 'rejected', 'sent', 'approved'];
+    if (!in_array((string) $proforma['status'], $allowedStatuses, true)) {
+        throw new Exception(
+            "This proforma cannot be emailed. Current status: {$proforma['status']}.",
+            409
+        );
+    }
+
+    $recipientEmail = strtolower(trim((string) ($_POST['recipient_email'] ?? $proforma['client_email'] ?? '')));
+    if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new Exception('A valid recipient email address is required.', 422);
+    }
+
+    $attachment = requireDocumentPdfUpload('proforma', (string) $proforma['proforma_number']);
+
+    $settingsResult = $conn->query('SELECT * FROM company_settings LIMIT 1');
+    $settings = $settingsResult ? $settingsResult->fetch_assoc() : [];
+    $companyName = trim((string) ($settings['company_name'] ?? 'Otelex')) ?: 'Otelex';
+    $companyName = str_replace(["\r", "\n"], ' ', $companyName);
+
+    $currencySymbol = $proforma['currency'] === 'USD' ? '$' : '₦';
+    $issueDate = date('d M Y', strtotime((string) $proforma['issue_date']));
+    $expiryDate = !empty($proforma['expiry_date'])
+        ? date('d M Y', strtotime((string) $proforma['expiry_date']))
+        : 'N/A';
+    $subject = "Proforma Invoice {$proforma['proforma_number']} from {$companyName}";
+
+    $emailData = [
+        'proforma_number' => (string) $proforma['proforma_number'],
+        'client_name' => (string) $proforma['client_name'],
+        'total_amount' => $currencySymbol . ' ' . number_format((float) $proforma['total_amount'], 2),
+        'issue_date' => $issueDate,
+        'expiry_date' => $expiryDate,
+        'notes' => (string) ($proforma['notes'] ?? ''),
+        'bank_name' => (string) ($settings['bank_name'] ?? ''),
+        'account_name' => (string) ($settings['account_name'] ?? ''),
+        'account_number' => (string) ($settings['account_number'] ?? ''),
+    ];
+
+    $logData = [
+        'document_type' => 'proforma',
+        'document_id' => $proformaId,
+        'document_number' => (string) $proforma['proforma_number'],
+        'recipient_email' => $recipientEmail,
+        'email_subject' => $subject,
+        'attachment_name' => $attachment['name'],
+        'attachment_size' => $attachment['size'],
+        'sent_by' => $userId,
+    ];
 
     try {
-        $updateStmt = $conn->prepare("UPDATE proforma_invoices SET status = 'sent' WHERE id = ? AND status = 'draft'");
-        $updateStmt->bind_param("i", $proformaId);
-        if (!$updateStmt->execute()) throw new Exception("Failed to update proforma status: " . $updateStmt->error, 500);
-        if ($updateStmt->affected_rows === 0) throw new Exception("Proforma status was not updated. It may have been modified by another user.", 409);
-        $updateStmt->close();
-
-        $logStmt     = $conn->prepare("
-            INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        $action      = "proforma.sent";
-        $modelType   = "ProformaInvoice";
-        $description = "{$loggedInUserEmail} sent proforma {$proforma['proforma_number']} to '{$proforma['client_name']}'. Valid until {$proforma['expiry_date']}.";
-        $ipAddress   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-
-        $logStmt->bind_param("ississ", $loggedInUserId, $action, $modelType, $proformaId, $description, $ipAddress);
-        $logStmt->execute();
-        $logStmt->close();
-
-        $conn->commit();
-
-        http_response_code(200);
-        echo json_encode([
-            "status"  => "success",
-            "message" => "Proforma invoice sent successfully. Awaiting client approval.",
-            "data"    => [
-                "id"              => $proformaId,
-                "proforma_number" => $proforma['proforma_number'],
-                "client_name"     => $proforma['client_name'],
-                "previous_status" => "draft",
-                "new_status"      => "sent",
-                "issue_date"      => $proforma['issue_date'],
-                "expiry_date"     => $proforma['expiry_date'],
-                "total_amount"    => (float)$proforma['total_amount'],
-                "currency"        => $proforma['currency']
-            ]
+        sendMail(
+            to: $recipientEmail,
+            toName: (string) $proforma['client_name'],
+            subject: $subject,
+            body: emailProformaDelivery($emailData, emailHtml($companyName)),
+            attachments: [$attachment]
+        );
+    } catch (Throwable $mailError) {
+        recordDocumentEmailLog($conn, [
+            ...$logData,
+            'delivery_status' => 'failed',
+            'failure_reason' => $mailError->getMessage(),
         ]);
-
-    } catch (Exception $e) {
-        $conn->rollback();
-        throw $e;
+        throw $mailError;
     }
 
-} catch (Exception $e) {
-    error_log("Send Proforma Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
-    echo json_encode(["status" => "failed", "message" => $e->getMessage()]);
+    $previousStatus = (string) $proforma['status'];
+    $status = $previousStatus;
+
+    if (in_array($previousStatus, ['draft', 'rejected'], true)) {
+        $status = 'sent';
+        $update = $conn->prepare("UPDATE proforma_invoices SET status = 'sent', updated_at = NOW() WHERE id = ?");
+        $update->bind_param('i', $proformaId);
+        $update->execute();
+        $update->close();
+    }
+
+    recordDocumentEmailLog($conn, [
+        ...$logData,
+        'delivery_status' => 'sent',
+        'failure_reason' => null,
+    ]);
+
+    $activity = $conn->prepare(
+        'INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $isResend = !in_array($previousStatus, ['draft', 'rejected'], true);
+    $action = $isResend ? 'proforma.resent' : 'proforma.sent';
+    $modelType = 'ProformaInvoice';
+    $description = "{$senderEmail} emailed proforma {$proforma['proforma_number']} with PDF attachment to {$recipientEmail}. Valid until {$expiryDate}.";
+    $ip = substr((string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'), 0, 45);
+    $activity->bind_param('ississ', $userId, $action, $modelType, $proformaId, $description, $ip);
+    $activity->execute();
+    $activity->close();
+
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'success',
+        'message' => "Proforma PDF emailed successfully to {$recipientEmail}.",
+        'data' => [
+            'status' => $status,
+            'attachment_name' => $attachment['name'],
+            'is_resend' => $isResend,
+        ],
+    ]);
+} catch (Throwable $error) {
+    respondDocumentEmailFailure($error, 'Send Proforma Error');
 }
-?>

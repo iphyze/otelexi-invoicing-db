@@ -22,8 +22,8 @@ try {
     $loggedInUserRole = $userData['role'];
 
     // Only Admin can view low stock alerts
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can view low stock reports.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin'], true)) {
+        throw new Exception("Unauthorized: Only Super Admins or Admins can view low stock reports.", 403);
     }
 
     // -------------------------------------------------------

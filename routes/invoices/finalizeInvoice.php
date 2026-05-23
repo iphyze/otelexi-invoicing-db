@@ -35,8 +35,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Admin only — stock deduction is a critical operation
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can finalize invoices.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin'], true)) {
+        throw new Exception("Unauthorized: Only Super Admins or Admins can finalize invoices.", 403);
     }
 
     if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
@@ -142,15 +142,17 @@ try {
 
             $newStock = $product['stock_quantity'] - $qtyToDeduct;  // from preflight data
             if ($newStock <= $product['reorder_level']) {
-                createNotification($conn, [
-                    'role'       => 'admin',
-                    'type'       => 'stock.low',
-                    'title'      => 'Low Stock Alert',
-                    'message'    => "'{$product['product_name']}' stock is now {$newStock} units "
-                                    . "(reorder level: {$product['reorder_level']}).",
-                    'model_type' => 'Product',
-                    'model_id'   => $productId
-                ]);
+                foreach (['super_admin', 'admin'] as $alertRole) {
+                    createNotification($conn, [
+                        'role'       => $alertRole,
+                        'type'       => 'stock.low',
+                        'title'      => 'Low Stock Alert',
+                        'message'    => "'{$product['product_name']}' stock is now {$newStock} units "
+                                        . "(reorder level: {$product['reorder_level']}).",
+                        'model_type' => 'Product',
+                        'model_id'   => $productId
+                    ]);
+                }
             }
 
 
@@ -230,9 +232,9 @@ try {
             'model_id'   => $invoiceId
         ]);
 
-        // Notify all accountants so they know a new invoice is outstanding
+        // Notify all accounting users so they know a new invoice is outstanding
         createNotification($conn, [
-            'role'       => 'accountant',
+            'role'       => 'accounting',
             'type'       => 'invoice.finalized',
             'title'      => 'New Invoice Sent',
             'message'    => "Invoice {$invoice['invoice_number']} ({$invoice['currency']} {$invoice['total_amount']}) "

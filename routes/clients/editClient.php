@@ -21,7 +21,7 @@ try {
     $loggedInUserId = (int)$userData['id'];
 
     // Only Admin and Sales can update clients
-    if (!in_array($userData['role'], ['admin', 'sales'])) {
+    if (!in_array($userData['role'], ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: Only Admins or Sales staff can update clients.", 403);
     }
 

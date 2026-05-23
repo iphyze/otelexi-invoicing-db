@@ -28,8 +28,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Admin only — invoices are financial records, Sales cannot delete
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can delete invoices.", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can delete invoices.", 403);
     }
 
     $data = json_decode(file_get_contents("php://input"), true);

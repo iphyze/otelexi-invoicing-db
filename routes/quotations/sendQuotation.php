@@ -1,162 +1,169 @@
 <?php
 // routes/quotations/sendQuotation.php
+// POST /quotation/{id}/send
+// Emails the frontend-generated quotation PDF and changes draft/rejected documents to sent.
+// Roles allowed: Admin; Sales may send quotations they created.
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/mailer.php';
+require_once __DIR__ . '/../../utils/emailTemplates.php';
+require_once __DIR__ . '/../../utils/documentEmail.php';
 
-/**
- * POST /quotations/{id}/send
- * Mark quotation as 'sent' (changes status from draft to sent).
- * Expiry date is already set on creation (issue_date + 14 days).
- * Roles allowed: Admin, Sales (own only)
- */
+use Dotenv\Dotenv;
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');
 
 try {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        throw new Exception("Route not found", 400);
+    Dotenv::createImmutable(__DIR__ . '/../../')->safeLoad();
+
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        throw new Exception('Method Not Allowed', 405);
     }
 
-    // Authenticate user
     $userData = authenticateUser();
-    $loggedInUserId = (int)$userData['id'];
-    $loggedInUserRole = $userData['role'];
-    $loggedInUserEmail = $userData['email'];
+    $userId = (int) $userData['id'];
+    $role = (string) $userData['role'];
+    $senderEmail = (string) $userData['email'];
 
-    // Only Admin and Sales can send quotations
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
-        throw new Exception("Unauthorized: Only Admins or Sales staff can send quotations.", 403);
+    if (!in_array($role, ['super_admin', 'admin', 'sales'], true)) {
+        throw new Exception('Unauthorized: Only Admins or Sales staff can send quotations.', 403);
     }
 
-    // -------------------------------------------------------
-    // 1. Validate Quotation ID
-    // -------------------------------------------------------
-    // ID can come from URL path or JSON body
-    $quotationId = null;
-    
-    // Fallback to JSON body
-    // if (!$quotationId) {
-    //     $data = json_decode(file_get_contents("php://input"), true);
-    //     if (isset($data['id']) && is_numeric($data['id'])) {
-    //         $quotationId = (int)$data['id'];
-    //     }
-    // }
-
-    if (!$quotationId) {
-        if (isset($_GET['id']) && is_numeric($_GET['id'])) {
-            $quotationId = (int)$_GET['id'];
-        }
+    if (empty($_GET['id']) || !is_numeric($_GET['id'])) {
+        throw new Exception('A valid Quotation ID is required.', 400);
     }
 
-    if (!$quotationId) {
-        throw new Exception("A valid Quotation ID is required.", 400);
+    $quotationId = (int) $_GET['id'];
+
+    $stmt = $conn->prepare(
+        'SELECT q.id, q.quotation_number, q.created_by, q.issue_date, q.expiry_date,
+                q.currency, q.total_amount, q.status, q.notes,
+                c.company_name AS client_name, c.email AS client_email
+         FROM quotations q
+         JOIN clients c ON c.id = q.client_id
+         WHERE q.id = ?
+         LIMIT 1'
+    );
+    $stmt->bind_param('i', $quotationId);
+    $stmt->execute();
+    $quotation = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$quotation) {
+        throw new Exception('Quotation not found.', 404);
     }
 
-    // -------------------------------------------------------
-    // 2. Verify Quotation Exists & Is Draft
-    // -------------------------------------------------------
-    $quotationCheck = $conn->prepare("
-        SELECT q.id, q.quotation_number, q.status, q.created_by, q.issue_date, q.expiry_date,
-               c.company_name AS client_name
-        FROM quotations q
-        JOIN clients c ON c.id = q.client_id
-        WHERE q.id = ? 
-        LIMIT 1
-    ");
-    $quotationCheck->bind_param("i", $quotationId);
-    $quotationCheck->execute();
-    $quotationResult = $quotationCheck->get_result();
-
-    if ($quotationResult->num_rows === 0) {
-        throw new Exception("Quotation not found.", 404);
+    if ($role === 'sales' && (int) $quotation['created_by'] !== $userId) {
+        throw new Exception('Unauthorized: You can only send quotations you created.', 403);
     }
 
-    $quotation = $quotationResult->fetch_assoc();
-    $quotationCheck->close();
-
-    // Only draft can be sent
-    if ($quotation['status'] !== 'draft') {
-        throw new Exception("Only draft quotations can be sent. Current status: {$quotation['status']}.", 409);
+    $allowedStatuses = ['draft', 'rejected', 'sent', 'accepted'];
+    if (!in_array((string) $quotation['status'], $allowedStatuses, true)) {
+        throw new Exception(
+            "This quotation cannot be emailed. Current status: {$quotation['status']}.",
+            409
+        );
     }
 
-    // Sales can only send their own
-    if ($loggedInUserRole === 'sales' && (int)$quotation['created_by'] !== $loggedInUserId) {
-        throw new Exception("Unauthorized: You can only send your own quotations.", 403);
+    $recipientEmail = strtolower(trim((string) ($_POST['recipient_email'] ?? $quotation['client_email'] ?? '')));
+    if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new Exception('A valid recipient email address is required.', 422);
     }
 
-    // -------------------------------------------------------
-    // 3. Execute Status Change
-    // -------------------------------------------------------
-    $conn->begin_transaction();
+    $attachment = requireDocumentPdfUpload('quotation', (string) $quotation['quotation_number']);
+
+    $settingsResult = $conn->query('SELECT company_name FROM company_settings LIMIT 1');
+    $settings = $settingsResult ? $settingsResult->fetch_assoc() : [];
+    $companyName = trim((string) ($settings['company_name'] ?? 'Otelex')) ?: 'Otelex';
+    $companyName = str_replace(["\r", "\n"], ' ', $companyName);
+
+    $currencySymbol = $quotation['currency'] === 'USD' ? '$' : '₦';
+    $issueDate = date('d M Y', strtotime((string) $quotation['issue_date']));
+    $expiryDate = date('d M Y', strtotime((string) $quotation['expiry_date']));
+    $subject = "Quotation {$quotation['quotation_number']} from {$companyName}";
+
+    $emailData = [
+        'quotation_number' => (string) $quotation['quotation_number'],
+        'client_name' => (string) $quotation['client_name'],
+        'total_amount' => $currencySymbol . ' ' . number_format((float) $quotation['total_amount'], 2),
+        'issue_date' => $issueDate,
+        'expiry_date' => $expiryDate,
+        'notes' => (string) ($quotation['notes'] ?? ''),
+    ];
+
+    $logData = [
+        'document_type' => 'quotation',
+        'document_id' => $quotationId,
+        'document_number' => (string) $quotation['quotation_number'],
+        'recipient_email' => $recipientEmail,
+        'email_subject' => $subject,
+        'attachment_name' => $attachment['name'],
+        'attachment_size' => $attachment['size'],
+        'sent_by' => $userId,
+    ];
 
     try {
-        $updateStmt = $conn->prepare("
-            UPDATE quotations 
-            SET status = 'sent' 
-            WHERE id = ? AND status = 'draft'
-        ");
-        $updateStmt->bind_param("i", $quotationId);
-
-        if (!$updateStmt->execute()) {
-            throw new Exception("Failed to update quotation status: " . $updateStmt->error, 500);
-        }
-
-        if ($updateStmt->affected_rows === 0) {
-            throw new Exception("Quotation status was not updated. It may have been modified by another user.", 409);
-        }
-        $updateStmt->close();
-
-        // -------------------------------------------------------
-        // 4. Log Activity
-        // -------------------------------------------------------
-        $logStmt = $conn->prepare("
-            INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-
-        $action      = "quotation.sent";
-        $modelType   = "Quotation";
-        $description = "{$loggedInUserEmail} sent quotation {$quotation['quotation_number']} to '{$quotation['client_name']}'. Valid until {$quotation['expiry_date']}.";
-        $ipAddress   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-
-        $logStmt->bind_param("ississ", $loggedInUserId, $action, $modelType, $quotationId, $description, $ipAddress);
-
-        if (!$logStmt->execute()) {
-            error_log("Failed to log quotation send: " . $logStmt->error);
-        }
-        $logStmt->close();
-
-        $conn->commit();
-
-        // -------------------------------------------------------
-        // 5. Return Response
-        // -------------------------------------------------------
-        http_response_code(200);
-        echo json_encode([
-            "status"  => "success",
-            "message" => "Quotation sent successfully.",
-            "data"    => [
-                "id"               => $quotationId,
-                "quotation_number" => $quotation['quotation_number'],
-                "previous_status"  => "draft",
-                "new_status"       => "sent",
-                "issue_date"       => $quotation['issue_date'],
-                "expiry_date"      => $quotation['expiry_date']
-            ]
+        sendMail(
+            to: $recipientEmail,
+            toName: (string) $quotation['client_name'],
+            subject: $subject,
+            body: emailQuotationDelivery($emailData, emailHtml($companyName)),
+            attachments: [$attachment]
+        );
+    } catch (Throwable $mailError) {
+        recordDocumentEmailLog($conn, [
+            ...$logData,
+            'delivery_status' => 'failed',
+            'failure_reason' => $mailError->getMessage(),
         ]);
-
-    } catch (Exception $e) {
-        $conn->rollback();
-        throw $e;
+        throw $mailError;
     }
 
-} catch (Exception $e) {
-    error_log("Send Quotation Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
-    echo json_encode([
-        "status"  => "failed",
-        "message" => $e->getMessage()
+    $previousStatus = (string) $quotation['status'];
+    $status = $previousStatus;
+
+    if (in_array($previousStatus, ['draft', 'rejected'], true)) {
+        $status = 'sent';
+        $update = $conn->prepare("UPDATE quotations SET status = 'sent', updated_at = NOW() WHERE id = ?");
+        $update->bind_param('i', $quotationId);
+        $update->execute();
+        $update->close();
+    }
+
+    recordDocumentEmailLog($conn, [
+        ...$logData,
+        'delivery_status' => 'sent',
+        'failure_reason' => null,
     ]);
+
+    $activity = $conn->prepare(
+        'INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $isResend = !in_array($previousStatus, ['draft', 'rejected'], true);
+    $action = $isResend ? 'quotation.resent' : 'quotation.sent';
+    $modelType = 'Quotation';
+    $description = "{$senderEmail} emailed quotation {$quotation['quotation_number']} with PDF attachment to {$recipientEmail}. Valid until {$expiryDate}.";
+    $ip = substr((string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'), 0, 45);
+    $activity->bind_param('ississ', $userId, $action, $modelType, $quotationId, $description, $ip);
+    $activity->execute();
+    $activity->close();
+
+    http_response_code(200);
+    echo json_encode([
+        'status' => 'success',
+        'message' => "Quotation PDF emailed successfully to {$recipientEmail}.",
+        'data' => [
+            'status' => $status,
+            'attachment_name' => $attachment['name'],
+            'is_resend' => $isResend,
+        ],
+    ]);
+} catch (Throwable $error) {
+    respondDocumentEmailFailure($error, 'Send Quotation Error');
 }
-?>

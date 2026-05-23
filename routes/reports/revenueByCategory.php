@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
  * GET /reports/revenue-by-category
  * Breaks down invoice revenue by product category for a given period.
  * Includes month-by-month trend per category.
- * Roles allowed: Admin, Accountant
+ * Roles allowed: Admin, Accounting
  *
  * Query params:
  *   ?from=2026-01-01  &to=2026-04-30   (defaults to current month)
@@ -25,8 +25,8 @@ try {
     $userData         = authenticateUser();
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'accountant'])) {
-        throw new Exception("Unauthorized: Only Admins or Accountants can access reports.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'accounting'])) {
+        throw new Exception("Unauthorized: Only Admins or Accounting users can access reports.", 403);
     }
 
     // -------------------------------------------------------

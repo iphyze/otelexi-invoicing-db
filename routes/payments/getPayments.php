@@ -6,8 +6,8 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
 /**
  * GET /payments
  * List payments with filters and pagination.
- * Admin & Accountant see all; Sales sees only payments on their own invoices.
- * Roles allowed: Admin, Accountant, Sales
+ * Admin & Accounting see all; Sales sees only payments on their own invoices.
+ * Roles allowed: Admin, Accounting, Sales
  *
  * Query params:
  *   ?invoice_id=7
@@ -30,7 +30,7 @@ try {
     $loggedInUserId   = (int)$userData['id'];
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'accountant', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'accounting', 'sales'])) {
         throw new Exception("Unauthorized: You do not have permission to view payments.", 403);
     }
 
@@ -62,6 +62,7 @@ try {
         JOIN invoices i  ON i.id  = p.invoice_id
         JOIN clients  c  ON c.id  = i.client_id
         LEFT JOIN users u ON u.id = p.recorded_by
+        LEFT JOIN payment_receipts r ON r.payment_id = p.id
         WHERE 1=1
     ";
     $params = [];
@@ -137,7 +138,8 @@ try {
             i.balance_due AS invoice_balance_due,
             i.currency, i.status AS invoice_status,
             i.client_id,
-            c.company_name AS client_name
+            c.company_name AS client_name,
+            r.id AS receipt_id, r.receipt_number, r.issued_at
         $baseQuery
         ORDER BY p.{$sortBy} {$sortOrder}
         LIMIT ? OFFSET ?
@@ -173,7 +175,12 @@ try {
             "notes"                => $row['notes'],
             "recorded_by"          => (int)$row['recorded_by'],
             "recorded_by_name"     => $row['recorded_by_name'],
-            "created_at"           => $row['created_at']
+            "created_at"           => $row['created_at'],
+            "receipt"              => $row['receipt_id'] ? [
+                "id"             => (int) $row['receipt_id'],
+                "receipt_number" => $row['receipt_number'],
+                "issued_at"      => $row['issued_at']
+            ] : null
         ];
     }
     $dataStmt->close();

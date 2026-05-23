@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../includes/authMiddleware.php';
 /**
  * GET /categories/dropdown
  * Get categories list for dropdown (used when creating products).
- * Roles allowed: Admin, Sales, Accountant
+ * Roles allowed: Admin, Sales, Accounting
  */
 
 header('Content-Type: application/json');

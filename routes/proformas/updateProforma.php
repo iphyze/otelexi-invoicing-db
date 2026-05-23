@@ -44,7 +44,7 @@ try {
     $loggedInUserRole  = $userData['role'];
     $loggedInUserEmail = $userData['email'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: Only Admins or Sales staff can update proforma invoices.", 403);
     }
 

@@ -1,59 +1,63 @@
 <?php
 
+declare(strict_types=1);
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-function authenticateUser() {
+require_once __DIR__ . '/security.php';
 
-    $headers = getallheaders();
-
-    if (!isset($headers['Authorization'])) {
-        http_response_code(401);
-        echo json_encode([
-            "status"  => "Failed",
-            "message" => "Unauthorized: No token provided"
-        ]);
-        exit;
-    }
-
-    $token = str_replace('Bearer ', '', $headers['Authorization']);
-
-    if (empty($token)) {
-        http_response_code(401);
-        echo json_encode([
-            "status"  => "Failed",
-            "message" => "Unauthorized: Empty token"
-        ]);
-        exit;
-    }
-
-    $secretKey = $_ENV["JWT_SECRET"] ?? "otelex_secret_key";
-
-    try {
-        $decoded = JWT::decode($token, new Key($secretKey, 'HS256'));
-        return (array) $decoded;
-    } catch (\Firebase\JWT\ExpiredException $e) {
-        http_response_code(401);
-        echo json_encode([
-            "status"  => "Failed",
-            "message" => "Token has expired"
-        ]);
-        exit;
-    } catch (\Firebase\JWT\SignatureInvalidException $e) {
-        http_response_code(401);
-        echo json_encode([
-            "status"  => "Failed",
-            "message" => "Invalid token signature"
-        ]);
-        exit;
-    } catch (Exception $e) {
-        http_response_code(401);
-        echo json_encode([
-            "status"  => "Failed",
-            "message" => "Invalid or malformed token"
-        ]);
-        exit;
-    }
+function unauthorized(string $message = 'Your session is invalid or has expired.'): void
+{
+    clearAccessCookie();
+    http_response_code(401);
+    echo json_encode([
+        'status'  => 'failed',
+        'message' => $message,
+    ]);
+    exit;
 }
 
-?>
+function authenticateUser(): array
+{
+    global $conn;
+
+    requireCsrfProtection();
+
+    $token = $_COOKIE[accessCookieName()] ?? '';
+    if ($token === '') {
+        unauthorized('Authentication is required.');
+    }
+
+    try {
+        $decoded = (array) JWT::decode($token, new Key(jwtSecret(), 'HS256'));
+
+        if (($decoded['type'] ?? '') !== 'access'
+            || ($decoded['iss'] ?? '') !== jwtIssuer()
+            || ($decoded['aud'] ?? '') !== jwtAudience()
+            || empty($decoded['id'])) {
+            unauthorized();
+        }
+
+        $userId = (int) $decoded['id'];
+        $stmt = $conn->prepare(
+            'SELECT id, name, email, role, is_active, auth_version, last_login, created_at, updated_at FROM users WHERE id = ? LIMIT 1'
+        );
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$user || (int) $user['is_active'] !== 1) {
+            unauthorized('Your account is unavailable. Please contact the administrator.');
+        }
+
+        if ((int) ($decoded['ver'] ?? 0) !== (int) $user['auth_version']) {
+            unauthorized('Your session has changed. Please sign in again.');
+        }
+
+        return publicUserData($user);
+    } catch (Throwable $e) {
+        unauthorized();
+    }
+}

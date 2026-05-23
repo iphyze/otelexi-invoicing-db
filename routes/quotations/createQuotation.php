@@ -25,7 +25,7 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin and Sales can create quotations
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: Only Admins or Sales staff can create quotations.", 403);
     }
 

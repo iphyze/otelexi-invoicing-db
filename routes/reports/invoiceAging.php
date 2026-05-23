@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
  * GET /reports/invoice-aging
  * Returns outstanding invoices grouped by aging buckets.
  * Uses the v_outstanding_invoices view from schema.
- * Roles allowed: Admin, Accountant
+ * Roles allowed: Admin, Accounting
  */
 
 header('Content-Type: application/json');
@@ -18,8 +18,8 @@ try {
     }
 
     $userData = authenticateUser();
-    if (!in_array($userData['role'], ['admin', 'accountant'])) {
-        throw new Exception("Unauthorized: Admins and Accountants only.", 403);
+    if (!in_array($userData['role'], ['super_admin', 'admin', 'accounting'])) {
+        throw new Exception("Unauthorized: Admins and Accounting users only.", 403);
     }
 
     // ── Optional filters ─────────────────────────────────────

@@ -19,8 +19,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin allowed
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can deactivate users", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can deactivate users", 403);
     }
 
     // Decode request body
@@ -46,7 +46,7 @@ try {
          * Only target users that are currently active to avoid redundant logs
          */
         $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-        $updateQuery = "UPDATE users SET is_active = 0 WHERE id IN ($placeholders) AND is_active = 1";
+        $updateQuery = "UPDATE users SET is_active = 0, auth_version = auth_version + 1 WHERE id IN ($placeholders) AND is_active = 1";
         $updateStmt = $conn->prepare($updateQuery);
 
         if (!$updateStmt) {
@@ -64,6 +64,12 @@ try {
         }
 
         $updateStmt->close();
+
+        $revokeQuery = "UPDATE auth_refresh_tokens SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id IN ($placeholders) AND revoked_at IS NULL";
+        $revokeStmt = $conn->prepare($revokeQuery);
+        $revokeStmt->bind_param(str_repeat('i', count($userIds)), ...$userIds);
+        $revokeStmt->execute();
+        $revokeStmt->close();
 
         /**
          * Log action

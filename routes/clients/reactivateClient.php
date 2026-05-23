@@ -19,8 +19,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin allowed
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can reactivate clients", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin'], true)) {
+        throw new Exception("Unauthorized: Only Super Admins or Admins can reactivate clients", 403);
     }
 
     // Decode request body

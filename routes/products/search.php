@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
 /**
  * GET /products/dropdown
  * Get products list for dropdown (used when creating quotations/invoices).
- * Roles allowed: Admin, Sales, Accountant
+ * Roles allowed: Admin, Sales, Accounting
  */
 
 header('Content-Type: application/json');

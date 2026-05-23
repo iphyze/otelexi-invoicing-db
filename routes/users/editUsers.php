@@ -35,7 +35,7 @@ try {
      * - Admin can update anyone
      * - Others can only update their own account
      */
-    if ($userData['role'] !== 'admin' && $targetUserId !== $loggedInUserId) {
+    if ($userData['role'] !== 'super_admin' && $targetUserId !== $loggedInUserId) {
         throw new Exception("Unauthorized: You can only update your own account", 403);
     }
 
@@ -58,6 +58,7 @@ try {
     $updateFields = [];
     $params = [];
     $types = "";
+    $invalidatesSessions = false;
 
     // Name
     if (isset($data['name']) && trim($data['name']) !== '') {
@@ -106,37 +107,44 @@ try {
         $updateFields[] = "password = ?";
         $params[] = password_hash($password, PASSWORD_DEFAULT);
         $types .= "s";
+        $invalidatesSessions = true;
     }
 
     // Role (Admin only)
     if (isset($data['role'])) {
-        if ($userData['role'] !== 'admin') {
-            throw new Exception("Unauthorized: Only Admins can update user roles", 403);
+        if ($userData['role'] !== 'super_admin') {
+            throw new Exception("Unauthorized: Only the Super Admin can update user roles", 403);
         }
 
-        $allowedRoles = ['admin', 'sales', 'accountant'];
+        $allowedRoles = ['super_admin', 'admin', 'sales', 'accounting'];
         if (!in_array($data['role'], $allowedRoles)) {
-            throw new Exception("Invalid role. Allowed: admin, sales, accountant", 400);
+            throw new Exception("Invalid role. Allowed: super_admin, admin, sales, accounting", 400);
         }
 
         $updateFields[] = "role = ?";
         $params[] = $data['role'];
         $types .= "s";
+        $invalidatesSessions = true;
     }
 
     // is_active status (Admin only)
     if (isset($data['is_active'])) {
-        if ($userData['role'] !== 'admin') {
-            throw new Exception("Unauthorized: Only Admins can change account status", 403);
+        if ($userData['role'] !== 'super_admin') {
+            throw new Exception("Unauthorized: Only the Super Admin can change account status", 403);
         }
 
         $updateFields[] = "is_active = ?";
         $params[] = (int)$data['is_active'];
         $types .= "i";
+        $invalidatesSessions = true;
     }
 
     if (empty($updateFields)) {
         throw new Exception("No valid fields provided for update", 400);
+    }
+
+    if ($invalidatesSessions) {
+        $updateFields[] = "auth_version = auth_version + 1";
     }
 
     /**
@@ -156,6 +164,10 @@ try {
         throw new Exception("Update failed: " . $updateStmt->error, 500);
     }
     $updateStmt->close();
+
+    if ($invalidatesSessions) {
+        revokeRefreshTokensForUser($conn, $targetUserId);
+    }
 
     /**
      * Log action

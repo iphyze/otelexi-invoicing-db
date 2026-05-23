@@ -24,8 +24,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin can update categories
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can update product categories.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin'], true)) {
+        throw new Exception("Unauthorized: Only Super Admins or Admins can update product categories.", 403);
     }
 
     // Read JSON payload

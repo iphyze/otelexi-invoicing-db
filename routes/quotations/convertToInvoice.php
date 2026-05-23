@@ -27,7 +27,7 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin and Sales can convert quotations to invoices
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: Only Admins or Sales staff can convert quotations to invoices.", 403);
     }
 

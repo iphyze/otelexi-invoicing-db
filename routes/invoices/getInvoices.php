@@ -6,8 +6,8 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
 /**
  * GET /invoices
  * List invoices with filters and pagination.
- * Sales sees own only; Admin and Accountant see all.
- * Roles allowed: Admin, Sales, Accountant
+ * Sales sees own only; Admin and Accounting see all.
+ * Roles allowed: Admin, Sales, Accounting
  *
  * Query params:
  *   ?status=draft|sent|partial|paid|overdue|cancelled
@@ -29,8 +29,8 @@ try {
     $loggedInUserId   = (int)$userData['id'];
     $loggedInUserRole = $userData['role'];
 
-    // Accountant can view all; Sales sees own only
-    if (!in_array($loggedInUserRole, ['admin', 'sales', 'accountant'])) {
+    // Accounting can view all; Sales sees own only
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales', 'accounting'])) {
         throw new Exception("Unauthorized: You do not have permission to view invoices.", 403);
     }
 
@@ -51,7 +51,7 @@ try {
     $sortBy    = isset($_GET['sortBy']) && in_array($_GET['sortBy'], $allowedSortFields) ? $_GET['sortBy'] : 'created_at';
     $sortOrder = isset($_GET['sortOrder']) && strtoupper($_GET['sortOrder']) === 'ASC' ? 'ASC' : 'DESC';
 
-    $validStatuses = ['draft', 'sent', 'partial', 'paid', 'overdue', 'cancelled'];
+    $validStatuses = ['draft', 'sent', 'partial', 'paid', 'overdue', 'credited', 'reversed', 'cancelled'];
 
     // -------------------------------------------------------
     // 2. Dynamic query
@@ -129,7 +129,7 @@ try {
             i.currency, i.exchange_rate,
             i.subtotal, i.discount_type, i.discount_value, i.discount_amount,
             i.taxable_amount, i.tax_amount, i.total_amount,
-            i.amount_paid, i.balance_due,
+            i.amount_paid, i.credited_amount, i.refunded_amount, i.balance_due,
             i.payment_terms, i.status, i.stock_deducted,
             i.reminder_count, i.last_reminder_at, i.next_reminder_at,
             i.created_at, i.updated_at,
@@ -181,6 +181,9 @@ try {
             "tax_amount"       => (float)$row['tax_amount'],
             "total_amount"     => (float)$row['total_amount'],
             "amount_paid"      => (float)$row['amount_paid'],
+            "credited_amount"  => (float)($row['credited_amount'] ?? 0),
+            "refunded_amount"  => (float)($row['refunded_amount'] ?? 0),
+            "adjusted_total"   => max(0, (float)$row['total_amount'] - (float)($row['credited_amount'] ?? 0)),
             "balance_due"      => (float)$row['balance_due'],
             "payment_terms"    => $row['payment_terms'],
             "status"           => $row['status'],

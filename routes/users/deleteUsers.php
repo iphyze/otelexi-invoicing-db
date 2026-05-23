@@ -19,8 +19,8 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin allowed
-    if ($loggedInUserRole !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can access this resource", 403);
+    if ($loggedInUserRole !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can access this resource", 403);
     }
 
     // Decode request body

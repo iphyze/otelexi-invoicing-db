@@ -33,9 +33,9 @@ try {
     // -------------------------------------------------------
     $auth = [
         $ep("POST", "{$base}/auth/login",           "Login with email & password. Returns JWT token.", false),
-        $ep("POST", "{$base}/auth/logout",          "Invalidate current token.", true, ["admin","sales","accountant"]),
-        $ep("GET",  "{$base}/auth/me",              "Get current authenticated user profile.", true, ["admin","sales","accountant"]),
-        $ep("PUT",  "{$base}/auth/change-password", "Change logged-in user's password.", true, ["admin","sales","accountant"],
+        $ep("POST", "{$base}/auth/logout",          "Invalidate current token.", true, ["admin","sales","accounting"]),
+        $ep("GET",  "{$base}/auth/me",              "Get current authenticated user profile.", true, ["admin","sales","accounting"]),
+        $ep("PUT",  "{$base}/auth/change-password", "Change logged-in user's password.", true, ["admin","sales","accounting"],
             [
                 "current_password" => "string (required)",
                 "new_password"     => "string (required, min 8 chars)"
@@ -61,7 +61,7 @@ try {
                 "name"     => "string (required)",
                 "email"    => "string (required, unique)",
                 "password" => "string (required, min 8 chars)",
-                "role"     => "enum: admin|sales|accountant (required)"
+                "role"     => "enum: admin|sales|accounting (required)"
             ]
         ),
         $ep("GET",    "{$base}/users/{id}",         "Get single user details.", true, ["admin"]),
@@ -69,7 +69,7 @@ try {
             [
                 "name"  => "string (optional)",
                 "email" => "string (optional, unique)",
-                "role"  => "enum: admin|sales|accountant (optional)",
+                "role"  => "enum: admin|sales|accounting (optional)",
                 "is_active" => "integer: 0|1 (optional)"
             ]
         ),
@@ -80,7 +80,7 @@ try {
     // CLIENTS
     // -------------------------------------------------------
     $clients = [
-        $ep("GET",    "{$base}/clients",                    "List all clients with optional filters.", true, ["admin","sales","accountant"],
+        $ep("GET",    "{$base}/clients",                    "List all clients with optional filters.", true, ["admin","sales","accounting"],
             [
                 "search"   => "string (optional) — search company name, email, phone",
                 "status"   => "string (optional) — active|inactive",
@@ -104,12 +104,12 @@ try {
                 "payment_terms"   => "enum: due_on_receipt|net_7 (optional, default: due_on_receipt)"
             ]
         ),
-        $ep("GET",    "{$base}/clients/{id}",               "Get single client with contacts.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/clients/{id}",               "Get single client with contacts.", true, ["admin","sales","accounting"]),
         $ep("PUT",    "{$base}/clients/{id}",               "Update client details.", true, ["admin","sales"]),
         $ep("DELETE", "{$base}/clients/{id}",               "Soft-delete a client.", true, ["admin"]),
 
         // Client Contacts (nested)
-        $ep("GET",    "{$base}/clients/{id}/contacts",      "List all contacts for a client.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/clients/{id}/contacts",      "List all contacts for a client.", true, ["admin","sales","accounting"]),
         $ep("POST",   "{$base}/clients/{id}/contacts",      "Add a contact person to a client.", true, ["admin","sales"],
             [
                 "name"       => "string (required)",
@@ -123,7 +123,7 @@ try {
         $ep("DELETE", "{$base}/clients/{id}/contacts/{cid}", "Remove a contact person.", true, ["admin","sales"]),
 
         // Client Statement
-        $ep("GET",    "{$base}/clients/{id}/statement",     "Get all invoices & payments for a client. Optional ?from=&to= date filters.", true, ["admin","accountant"],
+        $ep("GET",    "{$base}/clients/{id}/statement",     "Get all invoices & payments for a client. Optional ?from=&to= date filters.", true, ["admin","accounting"],
             [
                 "from" => "date (optional, YYYY-MM-DD)",
                 "to"   => "date (optional, YYYY-MM-DD)"
@@ -135,14 +135,14 @@ try {
     // PRODUCT CATEGORIES
     // -------------------------------------------------------
     $categories = [
-        $ep("GET",    "{$base}/categories",        "List all product categories.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/categories",        "List all product categories.", true, ["admin","sales","accounting"]),
         $ep("POST",   "{$base}/categories",        "Create a new category.", true, ["admin"],
             [
                 "name"        => "string (required, unique)",
                 "description" => "string (optional)"
             ]
         ),
-        $ep("GET",    "{$base}/categories/{id}",   "Get single category.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/categories/{id}",   "Get single category.", true, ["admin","sales","accounting"]),
         $ep("PUT",    "{$base}/categories/{id}",   "Update category.", true, ["admin"]),
         $ep("DELETE", "{$base}/categories/{id}",   "Delete category (only if no products linked).", true, ["admin"]),
     ];
@@ -151,7 +151,7 @@ try {
     // PRODUCTS
     // -------------------------------------------------------
     $products = [
-        $ep("GET",    "{$base}/products",           "List all products with optional filters.", true, ["admin","sales","accountant"],
+        $ep("GET",    "{$base}/products",           "List all products with optional filters.", true, ["admin","sales","accounting"],
             [
                 "category_id" => "integer (optional)",
                 "search"      => "string (optional) — search name or SKU",
@@ -176,7 +176,7 @@ try {
                 "reorder_level"   => "decimal (optional, default: 0)"
             ]
         ),
-        $ep("GET",    "{$base}/products/{id}",      "Get single product details.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/products/{id}",      "Get single product details.", true, ["admin","sales","accounting"]),
         $ep("PUT",    "{$base}/products/{id}",      "Update product.", true, ["admin"]),
         $ep("DELETE", "{$base}/products/{id}",      "Soft-delete product.", true, ["admin"]),
         $ep("GET",    "{$base}/products/low-stock",  "Get all products at or below reorder level. Uses v_low_stock view.", true, ["admin"]),
@@ -285,7 +285,7 @@ try {
     // INVOICES
     // -------------------------------------------------------
     $invoices = [
-        $ep("GET",    "{$base}/invoices",                            "List invoices. Sales sees own; Accountant sees all.", true, ["admin","sales","accountant"],
+        $ep("GET",    "{$base}/invoices",                            "List invoices. Sales sees own; Accounting sees all.", true, ["admin","sales","accounting"],
             [
                 "status"    => "string (optional) — draft|sent|partial|paid|overdue|cancelled",
                 "client_id" => "integer (optional)",
@@ -310,7 +310,7 @@ try {
                 "items"          => "array (required if no proforma/quotation)"
             ]
         ),
-        $ep("GET",    "{$base}/invoices/{id}",                       "Get invoice with line items and payment history.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/invoices/{id}",                       "Get invoice with line items and payment history.", true, ["admin","sales","accounting"]),
         $ep("PUT",    "{$base}/invoices/{id}",                       "Update draft invoice.", true, ["admin","sales"]),
         $ep("DELETE", "{$base}/invoices/{id}",                       "Delete draft invoice.", true, ["admin"]),
         $ep("POST",   "{$base}/invoices/{id}/finalize",              "Finalize invoice: locks it, deducts stock, sets status to 'sent'. Admin only.", true, ["admin"]),
@@ -320,15 +320,15 @@ try {
                 "reason" => "string (optional) — cancellation reason"
             ]
         ),
-        $ep("GET",    "{$base}/invoices/{id}/pdf",                   "Download invoice as PDF.", true, ["admin","sales","accountant"]),
+        $ep("GET",    "{$base}/invoices/{id}/pdf",                   "Download invoice as PDF.", true, ["admin","sales","accounting"]),
     ];
 
     // -------------------------------------------------------
     // PAYMENTS
     // -------------------------------------------------------
     $payments = [
-        $ep("GET",    "{$base}/invoices/{id}/payments",              "List all payments for a specific invoice.", true, ["admin","accountant"]),
-        $ep("POST",   "{$base}/invoices/{id}/payments",              "Record a payment against an invoice. Updates amount_paid & balance_due.", true, ["admin","accountant"],
+        $ep("GET",    "{$base}/invoices/{id}/payments",              "List all payments for a specific invoice.", true, ["admin","accounting"]),
+        $ep("POST",   "{$base}/invoices/{id}/payments",              "Record a payment against an invoice. Updates amount_paid & balance_due.", true, ["admin","accounting"],
             [
                 "amount"         => "decimal (required) — must be > 0 and <= balance_due",
                 "payment_date"   => "date (required, YYYY-MM-DD)",
@@ -337,7 +337,7 @@ try {
                 "notes"          => "string (optional)"
             ]
         ),
-        $ep("GET",    "{$base}/payments",                            "List all payments across invoices. Accountant & Admin only.", true, ["admin","accountant"],
+        $ep("GET",    "{$base}/payments",                            "List all payments across invoices. Accounting & Admin only.", true, ["admin","accounting"],
             [
                 "from"           => "date (optional)",
                 "to"             => "date (optional)",
@@ -353,13 +353,13 @@ try {
     // REPORTS
     // -------------------------------------------------------
     $reports = [
-        $ep("GET", "{$base}/reports/monthly-sales",    "Monthly revenue, VAT collected, payments received. Uses v_monthly_sales view.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/monthly-sales",    "Monthly revenue, VAT collected, payments received. Uses v_monthly_sales view.", true, ["admin","accounting"],
             [
                 "year"  => "integer (optional, default: current year)",
                 "month" => "integer (optional, 1-12 — filter single month)"
             ]
         ),
-        $ep("GET", "{$base}/reports/top-products",     "Products ranked by quantity sold and revenue. Uses v_top_products view.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/top-products",     "Products ranked by quantity sold and revenue. Uses v_top_products view.", true, ["admin","accounting"],
             [
                 "limit"       => "integer (optional, default: 20)",
                 "category_id" => "integer (optional — filter by category)",
@@ -373,19 +373,19 @@ try {
                 "status"      => "string (optional) — OUT OF STOCK|LOW STOCK|OK"
             ]
         ),
-        $ep("GET", "{$base}/reports/vat-collected",    "VAT breakdown: standard vs exempt, grouped by month.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/vat-collected",    "VAT breakdown: standard vs exempt, grouped by month.", true, ["admin","accounting"],
             [
                 "year"  => "integer (optional)",
                 "month" => "integer (optional)"
             ]
         ),
-        $ep("GET", "{$base}/reports/staff-sales",      "Sales performance per staff member. Uses v_sales_per_staff view. Sales sees own only.", true, ["admin","sales","accountant"],
+        $ep("GET", "{$base}/reports/staff-sales",      "Sales performance per staff member. Uses v_sales_per_staff view. Sales sees own only.", true, ["admin","sales","accounting"],
             [
                 "year"  => "integer (optional)",
                 "month" => "integer (optional)"
             ]
         ),
-        $ep("GET", "{$base}/reports/outstanding",      "Outstanding invoices with aging buckets. Uses v_outstanding_invoices view.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/outstanding",      "Outstanding invoices with aging buckets. Uses v_outstanding_invoices view.", true, ["admin","accounting"],
             [
                 "client_id"   => "integer (optional)",
                 "aging_bucket"=> "integer (optional) — 0=Current, 1=1-30d, 2=31-60d, 3=61-90d, 4=90+d"
@@ -397,12 +397,12 @@ try {
                 "to"   => "date (optional)"
             ]
         ),
-        $ep("GET", "{$base}/reports/overdue",          "All overdue invoices with days overdue count.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/overdue",          "All overdue invoices with days overdue count.", true, ["admin","accounting"],
             [
                 "client_id" => "integer (optional)"
             ]
         ),
-        $ep("GET", "{$base}/reports/payment-history",  "All payments within a date range, grouped by method.", true, ["admin","accountant"],
+        $ep("GET", "{$base}/reports/payment-history",  "All payments within a date range, grouped by method.", true, ["admin","accounting"],
             [
                 "from"           => "date (optional)",
                 "to"             => "date (optional)",
@@ -446,14 +446,14 @@ try {
     // DASHBOARD
     // -------------------------------------------------------
     $dashboard = [
-        $ep("GET", "{$base}/dashboard", "Summary cards: total revenue, unpaid invoices, low stock count, quotes pending, recent activity.", true, ["admin","sales","accountant"]),
+        $ep("GET", "{$base}/dashboard", "Summary cards: total revenue, unpaid invoices, low stock count, quotes pending, recent activity.", true, ["admin","sales","accounting"]),
     ];
 
     // -------------------------------------------------------
     // ACTIVITY LOG
     // -------------------------------------------------------
     $activity = [
-        $ep("GET", "{$base}/activity-log", "System audit trail. Admin sees all; others see own actions.", true, ["admin","sales","accountant"],
+        $ep("GET", "{$base}/activity-log", "System audit trail. Admin sees all; others see own actions.", true, ["admin","sales","accounting"],
             [
                 "user_id"    => "integer (optional)",
                 "action"     => "string (optional) — e.g. invoice.created",
@@ -473,7 +473,7 @@ try {
         "system"         => "Otelex Invoicing System",
         "version"        => "1.0.0",
         "base_url"       => $base,
-        "authentication" => "JWT Bearer Token — include header: Authorization: Bearer {token}",
+        "authentication" => "Secure HttpOnly cookie session; include X-CSRF-Token on state-changing requests.",
         "date_format"    => "YYYY-MM-DD",
         "currency"       => "NGN (primary), USD (optional with exchange rate)",
         "document_flow"  => [
@@ -490,7 +490,7 @@ try {
         "user_roles"     => [
             "admin"      => "Full access — manage users, products, settings, approve invoices",
             "sales"      => "Create quotations, proformas, invoices (own only). Cannot finalize or manage products.",
-            "accountant" => "Record payments, view all reports, send reminders. Cannot create documents or manage products."
+            "accounting" => "Record payments, view all reports, send reminders. Cannot create documents or manage products."
         ],
         "discount_rules" => [
             "document_level" => "Percentage discount on subtotal (stored on parent document)",

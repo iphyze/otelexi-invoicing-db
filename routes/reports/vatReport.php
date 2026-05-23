@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
  * VAT collected report for a given date range.
  * Breaks down taxable vs exempt sales, VAT at each rate, and monthly trend.
  * Per spec: standard VAT is 7.5% (Nigeria), some items may be exempt.
- * Roles allowed: Admin, Accountant
+ * Roles allowed: Admin, Accounting
  *
  * Query params:
  *   ?from=2026-01-01  &to=2026-04-30   (defaults to current month)
@@ -26,8 +26,8 @@ try {
     $userData         = authenticateUser();
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'accountant'])) {
-        throw new Exception("Unauthorized: Only Admins or Accountants can access reports.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'accounting'])) {
+        throw new Exception("Unauthorized: Only Admins or Accounting users can access reports.", 403);
     }
 
     // -------------------------------------------------------
@@ -50,13 +50,13 @@ try {
         SELECT
             COUNT(DISTINCT i.id)                                  AS total_invoices,
             COALESCE(SUM(i.taxable_amount), 0)                    AS total_taxable_amount,
-            COALESCE(SUM(i.tax_amount), 0)                        AS total_vat_collected,
-            COALESCE(SUM(i.total_amount), 0)                      AS total_invoice_value,
-            COALESCE(SUM(i.total_amount - i.tax_amount), 0)       AS total_net_amount
+            COALESCE(SUM(i.tax_amount - COALESCE((SELECT SUM(cn.tax_amount) FROM credit_notes cn WHERE cn.invoice_id = i.id AND cn.status = 'issued'), 0)), 0) AS total_vat_collected,
+            COALESCE(SUM(i.total_amount - COALESCE(i.credited_amount, 0)), 0) AS total_invoice_value,
+            COALESCE(SUM((i.total_amount - COALESCE(i.credited_amount, 0)) - (i.tax_amount - COALESCE((SELECT SUM(cn.tax_amount) FROM credit_notes cn WHERE cn.invoice_id = i.id AND cn.status = 'issued'), 0))), 0) AS total_net_amount
         FROM invoices i
         WHERE i.issue_date BETWEEN ? AND ?
           AND i.currency = ?
-          AND i.status NOT IN ('draft', 'cancelled')
+          AND i.status NOT IN ('draft', 'cancelled', 'reversed')
     ");
     $summaryStmt->bind_param("sss", $from, $to, $currency);
     $summaryStmt->execute();
@@ -78,7 +78,7 @@ try {
         JOIN invoices i ON i.id = ii.invoice_id
         WHERE i.issue_date BETWEEN ? AND ?
           AND i.currency = ?
-          AND i.status NOT IN ('draft', 'cancelled')
+          AND i.status NOT IN ('draft', 'cancelled', 'reversed')
         GROUP BY ii.tax_rate
         ORDER BY ii.tax_rate DESC
     ");
@@ -114,12 +114,12 @@ try {
         SELECT
             DATE_FORMAT(i.issue_date, '%Y-%m') AS month,
             COALESCE(SUM(i.taxable_amount), 0) AS taxable_amount,
-            COALESCE(SUM(i.tax_amount), 0)     AS vat_collected,
+            COALESCE(SUM(i.tax_amount - COALESCE((SELECT SUM(cn.tax_amount) FROM credit_notes cn WHERE cn.invoice_id = i.id AND cn.status = 'issued'), 0)), 0) AS vat_collected,
             COUNT(DISTINCT i.id)               AS invoice_count
         FROM invoices i
         WHERE i.issue_date BETWEEN ? AND ?
           AND i.currency = ?
-          AND i.status NOT IN ('draft', 'cancelled')
+          AND i.status NOT IN ('draft', 'cancelled', 'reversed')
         GROUP BY DATE_FORMAT(i.issue_date, '%Y-%m')
         ORDER BY month ASC
     ");

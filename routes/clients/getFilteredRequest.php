@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
 /**
  * GET /clients
  * Get filtered list of clients with pagination.
- * Roles allowed: Admin, Sales, Accountant
+ * Roles allowed: Admin, Sales, Accounting
  */
 
 header('Content-Type: application/json');
@@ -20,8 +20,8 @@ try {
     $userData = authenticateUser();
     $loggedInUserRole = $userData['role'];
 
-    // Only Admin, Sales, and Accountant can view clients
-    if (!in_array($loggedInUserRole, ['admin', 'sales', 'accountant'])) {
+    // Only Admin, Sales, and Accounting can view clients
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales', 'accounting'])) {
         throw new Exception("Unauthorized: You do not have permission to view clients", 403);
     }
 

@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
  * GET /reports/sales-summary
  * Aggregated sales overview for a given date range.
  * Returns totals, breakdowns by status, and a month-by-month trend line.
- * Roles allowed: Admin, Accountant
+ * Roles allowed: Admin, Accounting
  *
  * Query params:
  *   ?from=2026-01-01  &to=2026-04-30   (defaults to current month)
@@ -25,8 +25,8 @@ try {
     $userData         = authenticateUser();
     $loggedInUserRole = $userData['role'];
 
-    if (!in_array($loggedInUserRole, ['admin', 'accountant'])) {
-        throw new Exception("Unauthorized: Only Admins or Accountants can access reports.", 403);
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'accounting'])) {
+        throw new Exception("Unauthorized: Only Admins or Accounting users can access reports.", 403);
     }
 
     // -------------------------------------------------------
@@ -47,15 +47,14 @@ try {
     $summaryStmt = $conn->prepare("
         SELECT
             COUNT(*)                                             AS total_invoices,
-            COALESCE(SUM(total_amount), 0)                      AS gross_revenue,
+            COALESCE(SUM(CASE WHEN status NOT IN ('draft','cancelled','reversed') THEN total_amount - COALESCE(credited_amount, 0) ELSE 0 END), 0) AS gross_revenue,
             COALESCE(SUM(CASE WHEN status = 'paid'
-                         THEN total_amount ELSE 0 END), 0)      AS total_paid,
+                         THEN total_amount - COALESCE(credited_amount, 0) ELSE 0 END), 0) AS total_paid,
             COALESCE(SUM(CASE WHEN status IN ('sent','partial','overdue')
                          THEN balance_due ELSE 0 END), 0)       AS total_outstanding,
             COALESCE(SUM(CASE WHEN status = 'partial'
                          THEN amount_paid ELSE 0 END), 0)       AS partial_payments_received,
-            COALESCE(SUM(CASE WHEN status = 'cancelled'
-                         THEN total_amount ELSE 0 END), 0)      AS cancelled_value,
+            COALESCE(SUM(CASE WHEN status IN ('cancelled','reversed') THEN total_amount ELSE 0 END), 0) AS cancelled_value,
             COALESCE(SUM(tax_amount), 0)                        AS total_vat_collected,
             COALESCE(SUM(discount_amount), 0)                   AS total_discounts_given,
             COUNT(CASE WHEN status = 'paid'     THEN 1 END)     AS count_paid,
@@ -80,14 +79,14 @@ try {
         SELECT
             DATE_FORMAT(issue_date, '%Y-%m')                        AS month,
             COUNT(*)                                                AS invoice_count,
-            COALESCE(SUM(total_amount), 0)                          AS gross_revenue,
+            COALESCE(SUM(total_amount - COALESCE(credited_amount, 0)), 0) AS gross_revenue,
             COALESCE(SUM(amount_paid), 0)                           AS amount_collected,
             COALESCE(SUM(CASE WHEN status IN ('sent','partial','overdue')
                          THEN balance_due ELSE 0 END), 0)           AS outstanding
         FROM invoices
         WHERE issue_date BETWEEN ? AND ?
           AND currency = ?
-          AND status != 'draft'
+          AND status NOT IN ('draft','cancelled','reversed')
         GROUP BY DATE_FORMAT(issue_date, '%Y-%m')
         ORDER BY month ASC
     ");

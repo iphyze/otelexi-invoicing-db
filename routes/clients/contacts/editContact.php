@@ -24,7 +24,7 @@ try {
     $loggedInUserEmail = $userData['email'];
 
     // Only Admin and Sales can update contacts
-    if (!in_array($loggedInUserRole, ['admin', 'sales'])) {
+    if (!in_array($loggedInUserRole, ['super_admin', 'admin', 'sales'])) {
         throw new Exception("Unauthorized: Only Admins or Sales staff can update client contacts.", 403);
     }
 

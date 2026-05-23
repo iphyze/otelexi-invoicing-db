@@ -20,8 +20,8 @@ try {
     $loggedInUserName = $userData['email'];
 
     // Only Admin allowed
-    if ($userData['role'] !== 'admin') {
-        throw new Exception("Unauthorized: Only Admins can create users", 403);
+    if ($userData['role'] !== 'super_admin') {
+        throw new Exception("Unauthorized: Only the Super Admin can create users", 403);
     }
 
     // Decode JSON body
@@ -65,9 +65,9 @@ try {
         throw new Exception("Password must contain at least one special character (e.g. @, _, /, #)", 400);
     }
 
-    $allowedRoles = ['admin', 'sales', 'accountant'];
+    $allowedRoles = ['super_admin', 'admin', 'sales', 'accounting'];
     if (!in_array($role, $allowedRoles)) {
-        throw new Exception("Invalid role. Allowed: admin, sales, accountant", 400);
+        throw new Exception("Invalid role. Allowed: super_admin, admin, sales, accounting", 400);
     }
 
     // Validate is_active strictly

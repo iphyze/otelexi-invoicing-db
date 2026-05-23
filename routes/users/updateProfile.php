@@ -110,8 +110,9 @@ try {
         }
 
         $updateFields[] = "password = ?";
-        $params[] = password_hash(trim($data['password']), PASSWORD_DEFAULT);
+        $params[] = password_hash((string) $data['password'], PASSWORD_DEFAULT);
         $types .= "s";
+        $updateFields[] = "auth_version = auth_version + 1";
     }
 
     if (empty($updateFields)) {
@@ -139,6 +140,12 @@ try {
         throw new Exception("Update failed: " . $updateStmt->error, 500);
     }
     $updateStmt->close();
+
+    if ($wantsPasswordChange) {
+        // A password change invalidates every refresh session, including this browser.
+        revokeRefreshTokensForUser($conn, $loggedInUserId);
+        clearAuthCookies();
+    }
 
     /**
      * Log action
@@ -181,7 +188,8 @@ try {
             "is_active"  => (int)$updatedData['is_active'],
             "last_login" => $updatedData['last_login'],
             "created_at" => $updatedData['created_at'],
-            "updated_at" => $updatedData['updated_at']
+            "updated_at" => $updatedData['updated_at'],
+            "requires_reauthentication" => $wantsPasswordChange
         ]
     ]);
 
