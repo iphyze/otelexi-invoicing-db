@@ -23,6 +23,7 @@ function documentPdfFilename(string $type, string $documentNumber): string
         'invoice'   => 'Invoice',
         'receipt'   => 'Receipt',
         'credit_note' => 'Credit_Note',
+        'delivery_note' => 'Delivery_Note',
     ];
 
     $label = $labels[$type] ?? 'Document';

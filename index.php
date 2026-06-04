@@ -152,6 +152,13 @@ $routes = [
     // Document email history
     'GET /documents/{id}/email-history' => 'routes/documents/getEmailHistory.php',
 
+    // Delivery Notes
+    'GET /delivery-notes'              => 'routes/deliveryNotes/getDeliveryNotes.php',
+    'GET /delivery-notes/{id}'         => 'routes/deliveryNotes/getSingleDeliveryNote.php',
+    'POST /delivery-notes/create'      => 'routes/deliveryNotes/createDeliveryNote.php',
+    'PUT /delivery-notes/{id}/status'  => 'routes/deliveryNotes/updateDeliveryNoteStatus.php',
+    'POST /delivery-notes/{id}/send'   => 'routes/deliveryNotes/sendDeliveryNote.php',
+
     // Inventory control and stock movement history
     'GET /inventory/movements'       => 'routes/inventory/getStockMovements.php',
     'POST /inventory/adjustments'    => 'routes/inventory/adjustStock.php',
@@ -166,6 +173,26 @@ $routes = [
     'POST /payments/record'       => 'routes/payments/recordPayment.php',
     'POST /payments/{id}/receipt' => 'routes/receipts/issueReceipt.php',
     'DELETE /payments/{id}/delete' => 'routes/payments/deletePayment.php',
+
+    // Public customer-facing payment request page data
+    'GET /public/payment-request'       => 'routes/paymentLinks/getPublicPaymentRequest.php',
+
+    // Customer portal links
+    'GET /customer-portal-links'                => 'routes/customerPortal/getCustomerPortalLinks.php',
+    'POST /invoices/{id}/customer-portal-link'  => 'routes/customerPortal/createCustomerPortalLink.php',
+    'POST /customer-portal-links/{id}/send'     => 'routes/customerPortal/sendCustomerPortalLink.php',
+    'POST /customer-portal-links/{id}/revoke'   => 'routes/customerPortal/revokeCustomerPortalLink.php',
+    'GET /public/customer-portal'               => 'routes/customerPortal/getPublicCustomerPortal.php',
+
+    // Manual and Paystack payment links
+    'GET /payment-links'                  => 'routes/paymentLinks/getPaymentLinks.php',
+    'GET /payment-links/{id}'             => 'routes/paymentLinks/getSinglePaymentLink.php',
+    'POST /invoices/{id}/payment-links'   => 'routes/paymentLinks/createPaymentLink.php',
+    'POST /payment-links/{id}/send'       => 'routes/paymentLinks/sendPaymentLink.php',
+    'POST /payment-links/{id}/cancel'     => 'routes/paymentLinks/cancelPaymentLink.php',
+    'POST /payment-links/{id}/verify'     => 'routes/paymentLinks/verifyPaymentLink.php',
+    'POST /payments/paystack/webhook'     => 'routes/payments/paystack/webhook.php',
+    'GET /payments/paystack/callback'     => 'routes/payments/paystack/callback.php',
 
     // Payment receipts
     'GET /receipts/{id}'          => 'routes/receipts/getReceipt.php',
@@ -283,16 +310,6 @@ try {
 // Safety Net 3: Check if the included file outputted JSON properly
 $output = ob_get_clean();
 
-// Do not leak SQL paths, stack messages or infrastructure details from route-level errors.
-if (http_response_code() >= 500) {
-    error_log("Handler returned server error ({$routeKey}): " . substr($output, 0, 500));
-    echo json_encode([
-        "status"  => "failed",
-        "message" => "Internal server error."
-    ]);
-    exit;
-}
-
 // If output is empty, the route file likely handled its own response (normal case)
 if (empty($output)) {
     exit;
@@ -314,7 +331,39 @@ if ($jsonStart === false || $jsonEnd === false) {
     exit;
 }
 
+$jsonOutput = substr($output, $jsonStart, ($jsonEnd - $jsonStart) + 1);
+$decodedOutput = json_decode($jsonOutput, true);
+$currentResponseCode = http_response_code();
+
+// Do not leak SQL paths, stack messages or infrastructure details from route-level errors.
+// However, keep trusted gateway/service messages from route handlers so users can see
+// safe configuration/network errors such as Paystack SSL, invalid Paystack setup,
+// or temporary gateway unavailability instead of a vague "Internal server error".
+if ($currentResponseCode >= 500) {
+    $trustedRouteMessage = is_array($decodedOutput)
+        && isset($decodedOutput['message'])
+        && is_string($decodedOutput['message'])
+        && trim($decodedOutput['message']) !== ''
+        && in_array($currentResponseCode, [502, 503], true);
+
+    if ($trustedRouteMessage) {
+        error_log("Handler returned trusted service error ({$routeKey}): " . substr($jsonOutput, 0, 500));
+        echo json_encode([
+            "status"  => $decodedOutput['status'] ?? "failed",
+            "message" => $decodedOutput['message']
+        ]);
+        exit;
+    }
+
+    error_log("Handler returned server error ({$routeKey}): " . substr($output, 0, 500));
+    echo json_encode([
+        "status"  => "failed",
+        "message" => "Internal server error."
+    ]);
+    exit;
+}
+
 // Valid JSON found — output it (the route file likely handled status code already)
-echo $output;
+echo $jsonOutput;
 
 exit;

@@ -148,23 +148,31 @@ function sendMail(
         $mail->CharSet = PHPMailer::CHARSET_UTF8;
         $mail->Timeout = 20;
 
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true,
+            ],
+        ];
+
         /*
          * Use explicit SMTP_ENCRYPTION when configured.
          * Otherwise:
          * - Port 465 uses implicit SSL/SMTPS
          * - Other authenticated SMTP ports use STARTTLS
          */
-        $smtpEncryption = strtolower(mailEnv('SMTP_ENCRYPTION'));
+        // $smtpEncryption = strtolower(mailEnv('SMTP_ENCRYPTION'));
 
-        if (in_array($smtpEncryption, ['ssl', 'smtps'], true)) {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-        } elseif (in_array($smtpEncryption, ['tls', 'starttls'], true)) {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        } elseif ($smtpPort === 465) {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-        } else {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        }
+        // if (in_array($smtpEncryption, ['ssl', 'smtps'], true)) {
+        //     $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        // } elseif (in_array($smtpEncryption, ['tls', 'starttls'], true)) {
+        //     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        // } elseif ($smtpPort === 465) {
+        //     $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        // } else {
+        //     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        // }
 
         /*
          * Do not disable SSL certificate verification in production.

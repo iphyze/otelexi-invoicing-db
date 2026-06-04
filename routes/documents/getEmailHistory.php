@@ -1,6 +1,6 @@
 <?php
 // routes/documents/getEmailHistory.php
-// GET /documents/{id}/email-history?type=quotation|proforma|invoice|receipt|credit_note
+// GET /documents/{id}/email-history?type=quotation|proforma|invoice|receipt|credit_note|delivery_note
 // Returns recent send attempts for a document to authenticated users permitted to view it.
 
 declare(strict_types=1);
@@ -36,6 +36,7 @@ try {
         'invoice'   => ['table' => 'invoices', 'number' => 'invoice_number', 'owner' => 'created_by'],
         'receipt'   => ['table' => 'payment_receipts', 'number' => 'receipt_number', 'owner' => 'issued_by'],
         'credit_note' => ['table' => 'credit_notes', 'number' => 'credit_note_number', 'owner' => 'issued_by'],
+        'delivery_note' => ['table' => 'delivery_notes', 'number' => 'delivery_note_number', 'owner' => 'created_by'],
     ];
 
     if (!isset($sources[$documentType])) {

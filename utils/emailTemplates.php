@@ -406,3 +406,138 @@ function emailCreditNote(array $data, string $companyName = 'Otelex'): string
 
     return emailWrapper($content, $companyName);
 }
+
+// ── PAYMENT LINK / PAYMENT REQUEST ────────────────────────────────
+
+/**
+ * Payment link delivery email template for manual payment instructions and Paystack checkout.
+ */
+function emailPaymentLinkDelivery(array $data, string $companyName = 'Otelex'): string
+{
+    $provider = htmlspecialchars((string) ($data['provider'] ?? 'manual'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $invoiceNumber = htmlspecialchars((string) ($data['invoice_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $clientName = htmlspecialchars((string) ($data['client_name'] ?? 'Customer'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $amount = htmlspecialchars((string) ($data['amount'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $reference = htmlspecialchars((string) ($data['reference'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $paymentUrlRaw = trim((string) ($data['payment_url'] ?? ''));
+    $paymentUrl = htmlspecialchars($paymentUrlRaw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $expiresAt = htmlspecialchars((string) ($data['expires_at'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $bankName = htmlspecialchars((string) ($data['bank_name'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $accountName = htmlspecialchars((string) ($data['account_name'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $accountNumber = htmlspecialchars((string) ($data['account_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $bankBranch = htmlspecialchars((string) ($data['bank_branch'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $companyEmail = htmlspecialchars((string) ($data['company_email'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $companyPhone = htmlspecialchars((string) ($data['company_phone'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $cta = '';
+    if ($provider === 'paystack' && $paymentUrl !== '') {
+        $cta = <<<HTML
+        <p style="text-align:center; margin:28px 0;">
+          <a class="btn" href="{$paymentUrl}" style="color:#fff;">Pay Securely with Paystack</a>
+        </p>
+        <div class="info-box">
+          <p>If the button doesn't open, copy and paste this secure checkout link into your browser:</p>
+          <p style="word-break:break-all; color:#1a56db; font-size:12.5px;">{$paymentUrl}</p>
+        </div>
+        HTML;
+    }
+
+    $manualDetails = '';
+    if ($provider === 'manual' || $bankName !== '' || $accountNumber !== '') {
+        $branchLine = $bankBranch !== '' ? "<p>Branch: <strong>{$bankBranch}</strong></p>" : '';
+        $manualDetails = <<<HTML
+        <div class="info-box">
+          <p><strong>Manual Payment Details</strong></p>
+          <p>Bank: <strong>{$bankName}</strong></p>
+          <p>Account Name: <strong>{$accountName}</strong></p>
+          <p>Account Number: <strong>{$accountNumber}</strong></p>
+          {$branchLine}
+          <p>Payment Reference: <strong>{$reference}</strong></p>
+        </div>
+        HTML;
+    }
+
+    $support = '';
+    if ($companyEmail !== '' || $companyPhone !== '') {
+        $support = <<<HTML
+        <p style="font-size:13px; color:#64748b;">For support, contact us at <strong>{$companyEmail}</strong> {$companyPhone}.</p>
+        HTML;
+    }
+
+    $providerText = $provider === 'paystack'
+        ? 'You can complete this payment securely online using Paystack.'
+        : 'Please make payment using the bank details below and share your payment proof/reference with our team.';
+
+    $content = <<<HTML
+    <h2>Payment Request — {$invoiceNumber}</h2>
+    <p>Dear <strong>{$clientName}</strong>,</p>
+    <p>{$providerText}</p>
+
+    <div class="info-box">
+      <p>Invoice Number: <strong>{$invoiceNumber}</strong></p>
+      <p>Amount Due: <strong class="amount">{$amount}</strong></p>
+      <p>Payment Reference: <strong>{$reference}</strong></p>
+      <p>Expires At: <strong>{$expiresAt}</strong></p>
+    </div>
+
+    {$cta}
+    {$manualDetails}
+
+    <p>If you have already made this payment, please ignore this request and send your payment reference to us for reconciliation.</p>
+    {$support}
+    HTML;
+
+    return emailWrapper($content, $companyName);
+}
+
+// ── CUSTOMER PORTAL LINK ─────────────────────────────────────────
+
+/**
+ * Customer portal delivery email template.
+ */
+function emailCustomerPortalLinkDelivery(array $data, string $companyName = 'Otelex'): string
+{
+    $invoiceNumber = htmlspecialchars((string) ($data['invoice_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $clientName = htmlspecialchars((string) ($data['client_name'] ?? 'Customer'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $portalUrlRaw = trim((string) ($data['portal_url'] ?? ''));
+    $portalUrl = htmlspecialchars($portalUrlRaw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $amount = htmlspecialchars((string) ($data['amount'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $balanceDue = htmlspecialchars((string) ($data['balance_due'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $expiresAt = htmlspecialchars((string) ($data['expires_at'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $companyEmail = htmlspecialchars((string) ($data['company_email'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $companyPhone = htmlspecialchars((string) ($data['company_phone'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $support = '';
+    if ($companyEmail !== '' || $companyPhone !== '') {
+        $support = <<<HTML
+        <p style="font-size:13px; color:#64748b;">For support, contact us at <strong>{$companyEmail}</strong> {$companyPhone}.</p>
+        HTML;
+    }
+
+    $content = <<<HTML
+    <h2>Customer Portal — {$invoiceNumber}</h2>
+    <p>Dear <strong>{$clientName}</strong>,</p>
+    <p>Your secure customer portal is ready. Use the button below to view your invoice summary, delivery notes, receipts and available payment options.</p>
+
+    <div class="info-box">
+      <p>Invoice Number: <strong>{$invoiceNumber}</strong></p>
+      <p>Invoice Total: <strong>{$amount}</strong></p>
+      <p>Balance Due: <strong class="amount">{$balanceDue}</strong></p>
+      <p>Portal Link Expires: <strong>{$expiresAt}</strong></p>
+    </div>
+
+    <p style="text-align:center; margin:28px 0;">
+      <a class="btn" href="{$portalUrl}" style="color:#fff;">Open Customer Portal</a>
+    </p>
+
+    <div class="info-box">
+      <p>If the button doesn't open, copy and paste this secure link into your browser:</p>
+      <p style="word-break:break-all; color:#1a56db; font-size:12.5px;">{$portalUrl}</p>
+    </div>
+
+    <p>Please do not forward this link to anyone who should not have access to your invoice information.</p>
+    {$support}
+    HTML;
+
+    return emailWrapper($content, $companyName);
+}

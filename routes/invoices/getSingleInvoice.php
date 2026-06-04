@@ -200,7 +200,33 @@ try {
     $paymentsStmt->close();
 
     // -------------------------------------------------------
-    // 4. Fetch overdue reminder history
+    // 4. Fetch payment links / requests
+    // -------------------------------------------------------
+    $paymentLinksStmt = $conn->prepare("
+        SELECT pl.*, c.company_name AS client_name, c.email AS client_email,
+               u.name AS created_by_name, r.receipt_number
+        FROM payment_links pl
+        JOIN clients c ON c.id = pl.client_id
+        LEFT JOIN users u ON u.id = pl.created_by
+        LEFT JOIN payment_receipts r ON r.id = pl.receipt_id
+        WHERE pl.invoice_id = ?
+        ORDER BY pl.created_at DESC, pl.id DESC
+    " );
+    $paymentLinks = [];
+    if ($paymentLinksStmt) {
+        require_once __DIR__ . '/../../utils/paymentLinks.php';
+        $paymentLinksStmt->bind_param("i", $invoiceId);
+        $paymentLinksStmt->execute();
+        $paymentLinksResult = $paymentLinksStmt->get_result();
+        while ($row = $paymentLinksResult->fetch_assoc()) {
+            $row['invoice_number'] = $invoice['invoice_number'];
+            $paymentLinks[] = paymentLinkResponse($row);
+        }
+        $paymentLinksStmt->close();
+    }
+
+    // -------------------------------------------------------
+    // 5. Fetch overdue reminder history
     // -------------------------------------------------------
     $reminderStmt = $conn->prepare("
         SELECT
@@ -235,7 +261,7 @@ try {
     $reminderStmt->close();
 
     // -------------------------------------------------------
-    // 5. Fetch credit notes and refunds
+    // 6. Fetch credit notes and refunds
     // -------------------------------------------------------
     $creditStmt = $conn->prepare("
         SELECT cn.id, cn.credit_note_number, cn.currency, cn.credit_type, cn.amount, cn.tax_amount,
@@ -315,7 +341,7 @@ try {
         : 0;
 
     // -------------------------------------------------------
-    // 6. Compose response
+    // 7. Compose response
     // -------------------------------------------------------
     http_response_code(200);
     echo json_encode([
@@ -379,6 +405,7 @@ try {
             "next_reminder_at" => $invoice['next_reminder_at'],
             "items"          => $items,
             "payments"       => $payments,
+            "payment_links"  => $paymentLinks,
             "reminder_history"=> $reminderHistory,
             "credit_notes"   => $creditNotes,
             "refunds"        => $refunds,
