@@ -41,6 +41,7 @@ try {
     $amountInput = $data['amount'] ?? null;
     $expiresInDays = isset($data['expires_in_days']) ? max(1, min(30, (int) $data['expires_in_days'])) : 7;
     $sendEmail = !empty($data['send_email']);
+    $mailProvider = $sendEmail ? requestedMailProviderFromRequest($data) : 'system';
 
     $invoiceStmt = $conn->prepare(
         'SELECT i.id, i.invoice_number, i.client_id, i.status, i.total_amount, i.amount_paid,
@@ -197,7 +198,13 @@ try {
                 'company_phone' => $company['phone'] ?? '',
             ], $company['company_name'] ?? 'Otelex Hospitality Supplies Ltd');
 
-            sendMail((string) $invoice['client_email'], (string) $invoice['client_name'], "Payment Request for {$invoice['invoice_number']}", $body);
+            sendMail(
+                (string) $invoice['client_email'],
+                (string) $invoice['client_name'],
+                "Payment Request for {$invoice['invoice_number']}",
+                $body,
+                provider: $mailProvider
+            );
             $emailSent = true;
             logFinancialAction($conn, (int) $user['id'], 'payment_link.sent', 'PaymentLink', $paymentLinkId, "{$user['email']} emailed payment link {$reference} to {$invoice['client_email']}.");
         } catch (Throwable $mailError) {

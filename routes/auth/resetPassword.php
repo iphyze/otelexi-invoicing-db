@@ -27,65 +27,80 @@ try {
     if (empty($data['password'])) {
         throw new Exception("New password is required.", 400);
     }
-    if (strlen($data['password']) < 8) {
-        throw new Exception("Password must be at least 8 characters long.", 422);
-    }
-    if (!preg_match('/[^a-zA-Z0-9]/', $data['password'])) {
-        throw new Exception("Password must contain at least one special character (e.g. @, _, /, #).", 422);
-    }
+    assertPasswordStrength((string) $data['password']);
     if (empty($data['password_confirmation']) || $data['password'] !== $data['password_confirmation']) {
         throw new Exception("Passwords do not match.", 422);
     }
 
+    enforceAuthRateLimit(
+        $conn,
+        'password_reset_confirm_ip',
+        clientIpAddress(),
+        max(5, (int) (config('PASSWORD_RESET_CONFIRM_IP_MAX_ATTEMPTS', '15') ?? '15')),
+        max(300, (int) (config('PASSWORD_RESET_RATE_WINDOW_MINUTES', '30') ?? '30') * 60),
+        'Too many password reset attempts. Please wait before trying again.'
+    );
+
     $rawToken    = trim($data['token']);
     $hashedToken = hash('sha256', $rawToken);
-    $newPassword = $data['password'];
+    $newPassword = (string) $data['password'];
 
-    // ── Validate token ────────────────────────────────────────────
-    $tokenStmt = $conn->prepare("
-        SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at,
-               u.name, u.email
-        FROM password_reset_tokens prt
-        JOIN users u ON u.id = prt.user_id
-        WHERE prt.token = ?
-        LIMIT 1
-    ");
-    $tokenStmt->bind_param("s", $hashedToken);
-    $tokenStmt->execute();
-    $tokenRow = $tokenStmt->get_result()->fetch_assoc();
-    $tokenStmt->close();
+    // Validate and consume the reset token atomically so it cannot be reused by concurrent requests.
+    $conn->begin_transaction();
+    try {
+        $tokenStmt = $conn->prepare("
+            SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at,
+                   u.name, u.email
+            FROM password_reset_tokens prt
+            JOIN users u ON u.id = prt.user_id
+            WHERE prt.token = ?
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $tokenStmt->bind_param("s", $hashedToken);
+        $tokenStmt->execute();
+        $tokenRow = $tokenStmt->get_result()->fetch_assoc();
+        $tokenStmt->close();
 
-    if (!$tokenRow) {
-        throw new Exception("Invalid or expired reset link. Please request a new one.", 400);
+        if (!$tokenRow) {
+            throw new Exception("Invalid or expired reset link. Please request a new one.", 400);
+        }
+        if ($tokenRow['used_at'] !== null) {
+            throw new Exception("This reset link has already been used. Please request a new one.", 400);
+        }
+        if (strtotime($tokenRow['expires_at']) < time()) {
+            throw new Exception("This reset link has expired. Please request a new one.", 400);
+        }
+
+        $userId = (int)$tokenRow['user_id'];
+
+        // ── Update password ───────────────────────────────────────
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+
+        $updatePwd = $conn->prepare("UPDATE users SET password = ?, auth_version = auth_version + 1, updated_at = NOW() WHERE id = ?");
+        $updatePwd->bind_param("si", $hashedPassword, $userId);
+        if (!$updatePwd->execute()) {
+            throw new Exception("Failed to update password. Please try again.", 500);
+        }
+        $updatePwd->close();
+
+        // Invalidate all existing browser sessions and pending auth challenges after a password reset.
+        revokeRefreshTokensForUser($conn, $userId);
+        invalidatePendingAuthChallenges($conn, $userId);
+
+        // ── Mark token as used ────────────────────────────────────
+        $markUsed = $conn->prepare("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?");
+        $markUsed->bind_param("i", $tokenRow['id']);
+        $markUsed->execute();
+        $markUsed->close();
+
+        $conn->commit();
+    } catch (Throwable $transactionError) {
+        $conn->rollback();
+        throw $transactionError;
     }
-    if ($tokenRow['used_at'] !== null) {
-        throw new Exception("This reset link has already been used. Please request a new one.", 400);
-    }
-    if (strtotime($tokenRow['expires_at']) < time()) {
-        throw new Exception("This reset link has expired. Please request a new one.", 400);
-    }
 
-    $userId = (int)$tokenRow['user_id'];
-
-    // ── Update password ───────────────────────────────────────────
-    $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-
-    $updatePwd = $conn->prepare("UPDATE users SET password = ?, auth_version = auth_version + 1, updated_at = NOW() WHERE id = ?");
-    $updatePwd->bind_param("si", $hashedPassword, $userId);
-    if (!$updatePwd->execute()) {
-        throw new Exception("Failed to update password. Please try again.", 500);
-    }
-    $updatePwd->close();
-
-    // Invalidate all existing browser sessions after a password reset.
-    revokeRefreshTokensForUser($conn, $userId);
     clearAuthCookies();
-
-    // ── Mark token as used ────────────────────────────────────────
-    $markUsed = $conn->prepare("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?");
-    $markUsed->bind_param("i", $tokenRow['id']);
-    $markUsed->execute();
-    $markUsed->close();
 
     // ── Send confirmation email ───────────────────────────────────
     $settingsRes = $conn->query("SELECT company_name FROM company_settings LIMIT 1");
@@ -122,12 +137,14 @@ try {
         "message" => "Password reset successfully. You can now log in with your new password."
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     error_log("Reset Password Error: " . $e->getMessage());
-    http_response_code($e->getCode() >= 400 ? $e->getCode() : 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to reset the password at this time.' : $e->getMessage()
     ]);
 }
 ?>

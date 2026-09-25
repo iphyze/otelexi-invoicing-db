@@ -29,7 +29,18 @@ $routes = [
     // --------------------------------------------------------
     'GET /auth/csrf'      => 'routes/auth/csrf.php',
     'GET /auth/session'   => 'routes/auth/session.php',
+    'GET /auth/sessions'  => 'routes/auth/getSessions.php',
+    'POST /auth/sessions/revoke' => 'routes/auth/revokeSession.php',
+    'POST /auth/sessions/revoke-others' => 'routes/auth/revokeOtherSessions.php',
+    'POST /auth/activity' => 'routes/auth/activity.php',
     'POST /auth/login'    => 'routes/auth/login.php',
+    'POST /auth/mfa/verify' => 'routes/auth/verifyMfa.php',
+    'POST /auth/mfa/resend' => 'routes/auth/resendMfa.php',
+    'GET /auth/mfa/status'  => 'routes/auth/getMfaStatus.php',
+    'POST /auth/mfa/onboarding' => 'routes/auth/updateMfaOnboarding.php',
+    'POST /auth/mfa/setup' => 'routes/auth/startMfaSetup.php',
+    'POST /auth/mfa/setup/verify' => 'routes/auth/verifyMfaSetup.php',
+    'POST /auth/device-limit/revoke' => 'routes/auth/resolveDeviceLimit.php',
     'POST /auth/refresh'  => 'routes/auth/refresh.php',
     'POST /auth/logout'   => 'routes/auth/logout.php',
     'POST /auth/forgot-password' => 'routes/auth/forgotPassword.php',
@@ -166,6 +177,19 @@ $routes = [
     // Administration and audit controls (Super Admin only)
     'GET /admin/audit-logs'          => 'routes/admin/getAuditLogs.php',
     'GET /admin/overview'            => 'routes/admin/getAdministrationOverview.php',
+    'GET /admin/mail-diagnostics'     => 'routes/admin/getMailDiagnostics.php',
+    'POST /admin/mail-diagnostics/connection' => 'routes/admin/testMailConnection.php',
+    'POST /admin/mail-diagnostics/send'       => 'routes/admin/sendTestEmail.php',
+    'GET /admin/mail-settings'                => 'routes/admin/getMailSettings.php',
+    'PUT /admin/mail-settings'                => 'routes/admin/updateMailSettings.php',
+    'POST /admin/mail-settings/test'          => 'routes/admin/testMailProvider.php',
+    'GET /admin/mail-delivery-history'         => 'routes/admin/getMailDeliveryHistory.php',
+    'GET /admin/security-settings'                 => 'routes/admin/getSecuritySettings.php',
+    'PUT /admin/security-settings'                 => 'routes/admin/updateSecuritySettings.php',
+    'GET /admin/security-sessions'                 => 'routes/admin/getSecuritySessions.php',
+    'POST /admin/security-sessions/revoke'         => 'routes/admin/revokeSecuritySession.php',
+    'POST /admin/security-sessions/revoke-user'    => 'routes/admin/revokeUserSessions.php',
+    'POST /admin/security/mfa/reset'              => 'routes/admin/resetUserMfa.php',
 
     // Payments
     'GET /payments'               => 'routes/payments/getPayments.php',
@@ -192,6 +216,7 @@ $routes = [
     'POST /payment-links/{id}/cancel'     => 'routes/paymentLinks/cancelPaymentLink.php',
     'POST /payment-links/{id}/verify'     => 'routes/paymentLinks/verifyPaymentLink.php',
     'POST /payments/paystack/webhook'     => 'routes/payments/paystack/webhook.php',
+    'POST /webhooks/brevo/mail'          => 'routes/webhooks/brevoMail.php',
     'GET /payments/paystack/callback'     => 'routes/payments/paystack/callback.php',
 
     // Payment receipts

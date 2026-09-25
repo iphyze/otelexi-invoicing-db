@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../utils/paymentLinks.php';
+require_once __DIR__ . '/../../utils/uploadStorage.php';
 
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');
@@ -122,7 +123,7 @@ try {
                 'phone' => safePublicString($settings['phone'] ?? ''),
                 'email' => safePublicString($settings['email'] ?? ''),
                 'website' => safePublicString($settings['website'] ?? ''),
-                'logo_path' => safePublicString($settings['logo_path'] ?? ''),
+                'logo_path' => safePublicString(normalizeStoredUploadUrl($settings['logo_path'] ?? null)),
                 'legal_footer' => safePublicString($settings['legal_footer'] ?? ''),
             ],
             'bank' => [

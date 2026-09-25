@@ -75,6 +75,8 @@ try {
         throw new Exception('A valid recipient email address is required.', 422);
     }
 
+    $mailProvider = requestedMailProviderFromRequest();
+
     $attachment = requireDocumentPdfUpload('quotation', (string) $quotation['quotation_number']);
 
     $settingsResult = $conn->query('SELECT company_name FROM company_settings LIMIT 1');
@@ -113,7 +115,8 @@ try {
             toName: (string) $quotation['client_name'],
             subject: $subject,
             body: emailQuotationDelivery($emailData, emailHtml($companyName)),
-            attachments: [$attachment]
+            attachments: [$attachment],
+            provider: $mailProvider
         );
     } catch (Throwable $mailError) {
         recordDocumentEmailLog($conn, [

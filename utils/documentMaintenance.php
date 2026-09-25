@@ -24,6 +24,7 @@ function documentMaintenanceActor(array $actor = []): array
         'label'   => $label !== '' ? $label : 'System',
         'trigger' => $trigger,
         'ip'      => substr($ip !== '' ? $ip : 'cron', 0, 45),
+        'mail_provider' => normalizeMailProvider((string) ($actor['mail_provider'] ?? 'system')),
     ];
 }
 
@@ -211,6 +212,7 @@ function sendInvoiceOverdueReminder(
     bool $manual = false
 ): array {
     $actor = documentMaintenanceActor($actor);
+    $mailProvider = normalizeMailProvider((string) ($actor['mail_provider'] ?? 'system'));
     $invoice = fetchInvoiceForReminder($conn, $invoiceId);
 
     if (!$invoice) {
@@ -336,7 +338,8 @@ function sendInvoiceOverdueReminder(
                 'bank_name' => (string) ($settings['bank_name'] ?? ''),
                 'account_name' => (string) ($settings['account_name'] ?? ''),
                 'account_number' => (string) ($settings['account_number'] ?? ''),
-            ], $companyName)
+            ], $companyName),
+            provider: $mailProvider
         );
 
         $nextReminderAt = $manual && $stage >= count($thresholds)

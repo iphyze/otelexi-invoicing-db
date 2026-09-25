@@ -3,6 +3,7 @@
 require 'vendor/autoload.php';
 require_once 'includes/connection.php';
 require_once 'includes/authMiddleware.php';
+require_once 'includes/roles.php';
 
 header('Content-Type: application/json');
 date_default_timezone_set('Africa/Lagos');
@@ -18,10 +19,8 @@ try {
     $loggedInUserRole = $userData['role'];
     $loggedInUserEmail = $userData['email'];
 
-    // Only Admin allowed
-    if ($loggedInUserRole !== 'super_admin') {
-        throw new Exception("Unauthorized: Only the Super Admin can deactivate users", 403);
-    }
+    requireRole($userData, [ROLE_SUPER_ADMIN], 'Only the Super Admin can deactivate users.');
+    enforceSensitiveActionRateLimit($conn, 'admin_user_deactivate', $loggedInUserId);
 
     // Decode request body
     $data = json_decode(file_get_contents("php://input"), true);
@@ -41,6 +40,8 @@ try {
     $conn->begin_transaction();
 
     try {
+        // Lock/check administrative continuity inside the same mutation transaction.
+        assertBulkSuperAdminContinuity($conn, $userIds);
         /**
          * Soft-delete users (set is_active = 0)
          * Only target users that are currently active to avoid redundant logs
@@ -70,6 +71,16 @@ try {
         $revokeStmt->bind_param(str_repeat('i', count($userIds)), ...$userIds);
         $revokeStmt->execute();
         $revokeStmt->close();
+
+        $sessionRevokeQuery = "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()), revocation_reason = COALESCE(revocation_reason, 'deactivated') WHERE user_id IN ($placeholders) AND revoked_at IS NULL";
+        $sessionRevokeStmt = $conn->prepare($sessionRevokeQuery);
+        $sessionRevokeStmt->bind_param(str_repeat('i', count($userIds)), ...$userIds);
+        $sessionRevokeStmt->execute();
+        $sessionRevokeStmt->close();
+
+        foreach ($userIds as $userId) {
+            invalidatePendingAuthChallenges($conn, (int) $userId);
+        }
 
         /**
          * Log action
@@ -109,10 +120,12 @@ try {
 
 } catch (Exception $e) {
     error_log("Deactivate User Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to deactivate users at this time.' : $e->getMessage()
     ]);
 }
 

@@ -1,8 +1,11 @@
 RewriteEngine On
 RewriteBase /otelex-server/api
 
-# Never expose internal PHP handlers, configuration or database exports directly.
-RewriteRule ^(?:includes|routes)/ - [F,L,NC]
+# Block hidden files/directories such as .env, .git, and editor metadata.
+RewriteRule (^|/)\. - [F,L]
+
+# Never expose internal handlers, libraries, migrations, scheduler code, configuration, or database exports directly.
+RewriteRule ^(?:includes|routes|utils|vendor|database|cron)(?:/|$) - [F,L,NC]
 <FilesMatch "(^\.|\.(?:env|ini|log|sql|bak)$|^composer\.(?:json|lock)$)">
     Require all denied
 </FilesMatch>

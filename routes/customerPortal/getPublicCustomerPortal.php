@@ -10,6 +10,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../utils/customerPortal.php';
 require_once __DIR__ . '/../../utils/paymentLinks.php';
+require_once __DIR__ . '/../../utils/uploadStorage.php';
 
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');
@@ -277,7 +278,7 @@ try {
                 'phone' => safeCustomerPortalString($settings['phone'] ?? ''),
                 'email' => safeCustomerPortalString($settings['email'] ?? ''),
                 'website' => safeCustomerPortalString($settings['website'] ?? ''),
-                'logo_path' => safeCustomerPortalString($settings['logo_path'] ?? ''),
+                'logo_path' => safeCustomerPortalString(normalizeStoredUploadUrl($settings['logo_path'] ?? null)),
                 'legal_footer' => safeCustomerPortalString($settings['legal_footer'] ?? ''),
             ],
             'bank' => [

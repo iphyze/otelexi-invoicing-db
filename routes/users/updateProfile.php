@@ -91,6 +91,8 @@ try {
     $wantsPasswordChange = !empty($data['password']) || !empty($data['currentPassword']);
 
     if ($wantsPasswordChange) {
+        enforceSensitiveActionRateLimit($conn, 'profile_password_change', $loggedInUserId);
+
         if (empty($data['currentPassword']) || empty($data['password'])) {
             throw new Exception("Both current password and new password are required", 400);
         }
@@ -100,14 +102,7 @@ try {
             throw new Exception("Current password is incorrect", 401);
         }
 
-        // Validate new password rules
-        if (!v::stringType()->length(8, null)->validate($data['password'])) {
-            throw new Exception("New password must be at least 8 characters long", 400);
-        }
-
-        if (!preg_match('/[^a-zA-Z0-9]/', $data['password'])) {
-            throw new Exception("New password must contain at least one special character (e.g. @, _, /, #)", 400);
-        }
+        assertPasswordStrength((string) $data['password'], 400);
 
         $updateFields[] = "password = ?";
         $params[] = password_hash((string) $data['password'], PASSWORD_DEFAULT);
@@ -144,6 +139,7 @@ try {
     if ($wantsPasswordChange) {
         // A password change invalidates every refresh session, including this browser.
         revokeRefreshTokensForUser($conn, $loggedInUserId);
+        invalidatePendingAuthChallenges($conn, $loggedInUserId);
         clearAuthCookies();
     }
 
@@ -195,10 +191,12 @@ try {
 
 } catch (Exception $e) {
     error_log("Update Profile Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to update your profile at this time.' : $e->getMessage()
     ]);
 }
 

@@ -7,6 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
 require_once __DIR__ . '/../../includes/roles.php';
+require_once __DIR__ . '/../../utils/uploadStorage.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -23,6 +24,7 @@ try {
         throw new Exception('Company settings not found.', 404);
     }
     unset($settings['id']);
+    $settings['logo_path'] = normalizeStoredUploadUrl($settings['logo_path'] ?? null);
     echo json_encode(['status' => 'success', 'message' => 'Company settings retrieved successfully.', 'data' => $settings]);
 } catch (Throwable $e) {
     error_log('Get Settings Error: ' . $e->getMessage());

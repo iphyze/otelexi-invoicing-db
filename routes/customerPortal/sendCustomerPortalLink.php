@@ -37,6 +37,8 @@ try {
         throw new Exception('The client email address is invalid or missing.', 422);
     }
 
+    $mailProvider = requestedMailProviderFromRequest();
+
     // Refresh the token before emailing so old copied links can be rotated safely.
     $prepared = createOrRefreshCustomerPortalLink($conn, $invoice, $user, 30);
     $freshLink = $prepared['link'];
@@ -62,7 +64,8 @@ try {
         (string) $link['client_email'],
         (string) $link['client_name'],
         "Customer Portal for {$invoice['invoice_number']}",
-        $body
+        $body,
+        provider: $mailProvider
     );
 
     $update = $conn->prepare('UPDATE customer_portal_links SET last_sent_at = NOW(), email_count = email_count + 1, updated_by = ?, updated_at = NOW() WHERE id = ?');

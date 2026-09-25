@@ -9,7 +9,7 @@ require_once __DIR__ . '/../../includes/authMiddleware.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/receipt.php';
 require_once __DIR__ . '/../../utils/financialAdjustments.php';
-require_once __DIR__ . '/../../../cron/notificationHelper.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');

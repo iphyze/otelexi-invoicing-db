@@ -3,6 +3,7 @@
 require 'vendor/autoload.php';
 require_once 'includes/connection.php';
 require_once 'includes/authMiddleware.php';
+require_once 'includes/roles.php';
 
 header('Content-Type: application/json');
 date_default_timezone_set('Africa/Lagos');
@@ -18,10 +19,8 @@ try {
     $loggedInUserRole = $userData['role'];
     $loggedInUserEmail = $userData['email'];
 
-    // Only Admin allowed
-    if ($loggedInUserRole !== 'super_admin') {
-        throw new Exception("Unauthorized: Only the Super Admin can access this resource", 403);
-    }
+    requireRole($userData, [ROLE_SUPER_ADMIN], 'Only the Super Admin can delete users.');
+    enforceSensitiveActionRateLimit($conn, 'admin_user_delete', $loggedInUserId);
 
     // Decode request body
     $data = json_decode(file_get_contents("php://input"), true);
@@ -41,6 +40,8 @@ try {
     $conn->begin_transaction();
 
     try {
+        // Lock/check administrative continuity inside the same mutation transaction.
+        assertBulkSuperAdminContinuity($conn, $userIds);
         /**
          * Hard delete users
          */
@@ -106,10 +107,12 @@ try {
 
 } catch (Exception $e) {
     error_log("Delete User Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to delete users at this time.' : $e->getMessage()
     ]);
 }
 

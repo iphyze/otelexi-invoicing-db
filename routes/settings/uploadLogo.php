@@ -8,8 +8,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
 require_once __DIR__ . '/../../includes/roles.php';
-
-use Dotenv\Dotenv;
+require_once __DIR__ . '/../../utils/uploadStorage.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -20,8 +19,6 @@ try {
 
     $user = authenticateUser();
     requireRole($user, [ROLE_SUPER_ADMIN], 'Only the Super Admin can upload the company logo.');
-    Dotenv::createImmutable(__DIR__ . '/../../')->safeLoad();
-
     if (!isset($_FILES['logo']) || $_FILES['logo']['error'] !== UPLOAD_ERR_OK) {
         $errors = [
             UPLOAD_ERR_INI_SIZE => 'The uploaded file exceeds the server upload size limit.',
@@ -59,11 +56,7 @@ try {
         }
     }
 
-    $uploadDomain = rtrim((string) ($_ENV['UPLOAD'] ?? ''), '/');
-    if ($uploadDomain === '') {
-        throw new Exception('Logo public URL configuration is unavailable.', 500);
-    }
-    $uploadDir = __DIR__ . '/../../../uploads/logos/';
+    $uploadDir = uploadStorageDirectory('logos') . '/';
     if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
         throw new Exception('The logo upload directory could not be created.', 500);
     }
@@ -73,7 +66,7 @@ try {
     if (!move_uploaded_file($file['tmp_name'], $destination)) {
         throw new Exception('The uploaded logo could not be saved.', 500);
     }
-    $publicPath = $uploadDomain . '/uploads/logos/' . $newFileName;
+    $publicPath = uploadPublicUrl('logos/' . $newFileName);
 
     $current = $conn->query('SELECT logo_path FROM company_settings LIMIT 1')->fetch_assoc();
     $update = $conn->prepare('UPDATE company_settings SET logo_path = ? LIMIT 1');

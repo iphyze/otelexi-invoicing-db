@@ -3,10 +3,13 @@
 require 'vendor/autoload.php';
 require_once 'includes/connection.php';
 require_once 'includes/authMiddleware.php';
+require_once 'includes/roles.php';
 
 use Respect\Validation\Validator as v;
 
 header('Content-Type: application/json');
+
+$transactionStarted = false;
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
@@ -30,19 +33,20 @@ try {
         throw new Exception("Field 'id' is required.", 400);
     }
 
-    /**
-     * Authorization rule:
-     * - Admin can update anyone
-     * - Others can only update their own account
-     */
-    if ($userData['role'] !== 'super_admin' && $targetUserId !== $loggedInUserId) {
-        throw new Exception("Unauthorized: You can only update your own account", 403);
-    }
+    // Administrative user editing is privileged. Personal password changes use /users/update,
+    // which verifies the user's current password.
+    requireRole($userData, [ROLE_SUPER_ADMIN], 'Only the Super Admin can modify user accounts.');
+    enforceSensitiveActionRateLimit($conn, 'admin_user_edit', $loggedInUserId);
+
+    // Keep privileged account changes atomic and lock the target while checking
+    // Super Admin continuity.
+    $conn->begin_transaction();
+    $transactionStarted = true;
 
     /**
      * Check if target user exists
      */
-    $checkStmt = $conn->prepare("SELECT id, email FROM users WHERE id = ?");
+    $checkStmt = $conn->prepare("SELECT id, email, role, is_active FROM users WHERE id = ? FOR UPDATE");
     $checkStmt->bind_param("i", $targetUserId);
     $checkStmt->execute();
     $existingUser = $checkStmt->get_result()->fetch_assoc();
@@ -90,19 +94,14 @@ try {
         $updateFields[] = "email = ?";
         $params[] = $email;
         $types .= "s";
+        $invalidatesSessions = true;
     }
 
     // Password (optional)
     if (isset($data['password']) && trim($data['password']) !== '') {
         $password = trim($data['password']);
         
-        if (!v::stringType()->length(8, null)->validate($password)) {
-            throw new Exception("Password must be at least 8 characters long", 400);
-        }
-
-        if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
-            throw new Exception("Password must contain at least one special character (e.g. @, _, /, #)", 400);
-        }
+        assertPasswordStrength($password, 400);
 
         $updateFields[] = "password = ?";
         $params[] = password_hash($password, PASSWORD_DEFAULT);
@@ -112,14 +111,14 @@ try {
 
     // Role (Admin only)
     if (isset($data['role'])) {
-        if ($userData['role'] !== 'super_admin') {
-            throw new Exception("Unauthorized: Only the Super Admin can update user roles", 403);
-        }
-
         $allowedRoles = ['super_admin', 'admin', 'sales', 'accounting'];
-        if (!in_array($data['role'], $allowedRoles)) {
+        if (!in_array($data['role'], $allowedRoles, true)) {
             throw new Exception("Invalid role. Allowed: super_admin, admin, sales, accounting", 400);
         }
+        if ($targetUserId === $loggedInUserId && $data['role'] !== ROLE_SUPER_ADMIN) {
+            throw new Exception('You cannot remove your own Super Admin role.', 409);
+        }
+        assertSuperAdminContinuity($conn, $existingUser, (string) $data['role'], null, false);
 
         $updateFields[] = "role = ?";
         $params[] = $data['role'];
@@ -129,12 +128,17 @@ try {
 
     // is_active status (Admin only)
     if (isset($data['is_active'])) {
-        if ($userData['role'] !== 'super_admin') {
-            throw new Exception("Unauthorized: Only the Super Admin can change account status", 403);
+        $newActive = (int) $data['is_active'];
+        if (!in_array($newActive, [0, 1], true)) {
+            throw new Exception('Account status must be active or inactive.', 400);
         }
+        if ($targetUserId === $loggedInUserId && $newActive === 0) {
+            throw new Exception('You cannot deactivate your own account.', 409);
+        }
+        assertSuperAdminContinuity($conn, $existingUser, null, $newActive, false);
 
         $updateFields[] = "is_active = ?";
-        $params[] = (int)$data['is_active'];
+        $params[] = $newActive;
         $types .= "i";
         $invalidatesSessions = true;
     }
@@ -167,6 +171,7 @@ try {
 
     if ($invalidatesSessions) {
         revokeRefreshTokensForUser($conn, $targetUserId);
+        invalidatePendingAuthChallenges($conn, $targetUserId);
     }
 
     /**
@@ -198,6 +203,9 @@ try {
     $updatedData = $fetchStmt->get_result()->fetch_assoc();
     $fetchStmt->close();
 
+    $conn->commit();
+    $transactionStarted = false;
+
     http_response_code(200);
     echo json_encode([
         "status"  => "success",
@@ -206,11 +214,16 @@ try {
     ]);
 
 } catch (Exception $e) {
+    if ($transactionStarted) {
+        $conn->rollback();
+    }
     error_log("Update User Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to update the user at this time.' : $e->getMessage()
     ]);
 }
 

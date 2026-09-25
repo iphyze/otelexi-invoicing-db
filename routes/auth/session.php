@@ -15,7 +15,10 @@ try {
 
     jsonSuccess([
         'status' => 'success',
-        'data'   => ['user' => $user],
+        'data'   => [
+            'user'           => $user,
+            'session_policy' => sessionPolicyData($conn),
+        ],
     ]);
 } catch (Throwable $e) {
     $code = (int) $e->getCode();

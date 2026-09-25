@@ -36,6 +36,8 @@ try {
         throw new Exception('The client email address is invalid or missing.', 422);
     }
 
+    $mailProvider = requestedMailProviderFromRequest();
+
     $company = fetchCompanyPaymentSettings($conn);
     $body = emailPaymentLinkDelivery([
         'provider' => $link['provider'],
@@ -54,7 +56,13 @@ try {
         'company_phone' => $company['phone'] ?? '',
     ], $company['company_name'] ?? 'Otelex Hospitality Supplies Ltd');
 
-    sendMail((string) $link['client_email'], (string) $link['client_name'], "Payment Request for {$link['invoice_number']}", $body);
+    sendMail(
+        (string) $link['client_email'],
+        (string) $link['client_name'],
+        "Payment Request for {$link['invoice_number']}",
+        $body,
+        provider: $mailProvider
+    );
     logFinancialAction($conn, (int) $user['id'], 'payment_link.sent', 'PaymentLink', $id, "{$user['email']} emailed payment link {$link['reference']} to {$link['client_email']}.");
 
     echo json_encode(['status' => 'success', 'message' => 'Payment link emailed to the client successfully.', 'data' => paymentLinkResponse(fetchPaymentLink($conn, $id))]);

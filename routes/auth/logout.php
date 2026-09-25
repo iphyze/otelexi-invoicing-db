@@ -15,7 +15,17 @@ try {
 
     $parsed = parseRefreshCookie($_COOKIE[refreshCookieName()] ?? null);
     if ($parsed !== null) {
-        revokeRefreshTokenBySelector($conn, $parsed['selector']);
+        $stmt = $conn->prepare('SELECT session_id FROM auth_refresh_tokens WHERE selector = ? LIMIT 1');
+        $stmt->bind_param('s', $parsed['selector']);
+        $stmt->execute();
+        $tokenRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!empty($tokenRow['session_id'])) {
+            revokeAuthSessionById($conn, (int) $tokenRow['session_id'], 'logout');
+        } else {
+            revokeRefreshTokenBySelector($conn, $parsed['selector']);
+        }
     }
 
     clearAuthCookies();

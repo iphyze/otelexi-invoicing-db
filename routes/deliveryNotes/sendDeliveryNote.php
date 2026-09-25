@@ -72,6 +72,8 @@ try {
         throw new Exception('A valid recipient email address is required.', 422);
     }
 
+    $mailProvider = requestedMailProviderFromRequest();
+
     $attachment = requireDocumentPdfUpload('delivery_note', (string) $note['delivery_note_number']);
 
     $settingsResult = $conn->query('SELECT * FROM company_settings LIMIT 1');
@@ -109,7 +111,8 @@ try {
             toName: (string) $note['client_name'],
             subject: $subject,
             body: emailDeliveryNote($emailData, emailHtml($companyName)),
-            attachments: [$attachment]
+            attachments: [$attachment],
+            provider: $mailProvider
         );
     } catch (Throwable $mailError) {
         recordDocumentEmailLog($conn, [

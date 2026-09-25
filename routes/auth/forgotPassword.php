@@ -27,6 +27,7 @@ try {
 
     require_once __DIR__ . '/../../vendor/autoload.php';
     require_once __DIR__ . '/../../includes/connection.php';
+    require_once __DIR__ . '/../../includes/security.php';
     require_once __DIR__ . '/../../utils/mailer.php';
     require_once __DIR__ . '/../../utils/emailTemplates.php';
 
@@ -51,6 +52,23 @@ try {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new Exception('Invalid email address.', 400);
     }
+
+    enforceAuthRateLimit(
+        $conn,
+        'password_reset_ip',
+        clientIpAddress(),
+        max(3, (int) (config('PASSWORD_RESET_IP_MAX_REQUESTS', '10') ?? '10')),
+        max(300, (int) (config('PASSWORD_RESET_RATE_WINDOW_MINUTES', '30') ?? '30') * 60),
+        'Too many password reset requests. Please wait before trying again.'
+    );
+    enforceAuthRateLimit(
+        $conn,
+        'password_reset_identifier',
+        $email,
+        max(3, (int) (config('PASSWORD_RESET_IDENTIFIER_MAX_REQUESTS', '5') ?? '5')),
+        max(300, (int) (config('PASSWORD_RESET_RATE_WINDOW_MINUTES', '30') ?? '30') * 60),
+        'Too many password reset requests. Please wait before trying again.'
+    );
 
     // Look up the account. The same response is returned if it is absent or inactive.
     $stmt = $conn->prepare(
@@ -222,7 +240,7 @@ try {
     error_log('Forgot Password Error: ' . $e->getMessage());
 
     $code = (int) $e->getCode();
-    $isClientError = in_array($code, [400, 405, 422], true);
+    $isClientError = in_array($code, [400, 405, 422, 429], true);
     $responseCode = $isClientError ? $code : 500;
 
     http_response_code($responseCode);

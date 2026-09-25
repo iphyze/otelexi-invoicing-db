@@ -7,6 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
 require_once __DIR__ . '/../../includes/roles.php';
+require_once __DIR__ . '/../../utils/uploadStorage.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -64,6 +65,7 @@ try {
         throw new Exception('Company settings could not be loaded after update.', 500);
     }
     unset($updated['id']);
+    $updated['logo_path'] = normalizeStoredUploadUrl($updated['logo_path'] ?? null);
 
     $action = 'settings.updated';
     $model = 'CompanySettings';

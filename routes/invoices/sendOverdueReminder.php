@@ -22,6 +22,8 @@ try {
         throw new Exception('Only an administrator or accounting can send payment reminders.', 403);
     }
 
+    $mailProvider = requestedMailProviderFromRequest();
+
     $invoiceId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 
     if ($invoiceId < 1) {
@@ -33,6 +35,7 @@ try {
         'label' => (string) $user['email'],
         'trigger' => 'manual',
         'ip' => (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'),
+        'mail_provider' => $mailProvider,
     ], true);
 
     if ($result['status'] === 'failed') {

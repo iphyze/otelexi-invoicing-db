@@ -2,7 +2,7 @@
 // routes/invoices/finalizeInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
-require_once __DIR__ . '/../../../cron/notificationHelper.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /invoices/{id}/finalize

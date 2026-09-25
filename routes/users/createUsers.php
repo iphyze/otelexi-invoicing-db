@@ -3,6 +3,8 @@
 require 'vendor/autoload.php';
 require_once 'includes/connection.php';
 require_once 'includes/authMiddleware.php';
+require_once 'includes/roles.php';
+require_once 'includes/mfa.php';
 
 use Respect\Validation\Validator as v;
 
@@ -19,10 +21,8 @@ try {
     $loggedInUserId = (int)$userData['id'];
     $loggedInUserName = $userData['email'];
 
-    // Only Admin allowed
-    if ($userData['role'] !== 'super_admin') {
-        throw new Exception("Unauthorized: Only the Super Admin can create users", 403);
-    }
+    requireRole($userData, [ROLE_SUPER_ADMIN], 'Only the Super Admin can create users.');
+    enforceSensitiveActionRateLimit($conn, 'admin_user_create', $loggedInUserId);
 
     // Decode JSON body
     $data = json_decode(file_get_contents("php://input"), true);
@@ -56,14 +56,7 @@ try {
         throw new Exception("Invalid email format", 400);
     }
 
-    if (!v::stringType()->length(8, null)->validate($password)) {
-        throw new Exception("Password must be at least 8 characters long", 400);
-    }
-
-    // Demand at least one special character
-    if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
-        throw new Exception("Password must contain at least one special character (e.g. @, _, /, #)", 400);
-    }
+    assertPasswordStrength($password, 400);
 
     $allowedRoles = ['super_admin', 'admin', 'sales', 'accounting'];
     if (!in_array($role, $allowedRoles)) {
@@ -100,6 +93,15 @@ try {
     $insertedId = $insertStmt->insert_id;
     $insertStmt->close();
 
+    // New accounts are invited to choose whether to enable email MFA on
+    // their first successful sign-in. The user can dismiss the prompt and
+    // enable MFA later from My Profile.
+    try {
+        setMfaOnboardingStatus($conn, (int) $insertedId, 'pending');
+    } catch (Throwable $onboardingError) {
+        error_log('Create User MFA Onboarding Error: ' . $onboardingError->getMessage());
+    }
+
     // Log action
     $logStmt = $conn->prepare("
         INSERT INTO activity_log (user_id, action, model_type, model_id, description, ip_address)
@@ -130,10 +132,12 @@ try {
 
 } catch (Exception $e) {
     error_log("Create User Error: " . $e->getMessage());
-    http_response_code($e->getCode() ?: 500);
+    $code = (int) $e->getCode();
+    $code = ($code >= 400 && $code < 500) ? $code : 500;
+    http_response_code($code);
     echo json_encode([
         "status"  => "failed",
-        "message" => $e->getMessage()
+        "message" => $code === 500 ? 'Unable to create the user at this time.' : $e->getMessage()
     ]);
 }
 
