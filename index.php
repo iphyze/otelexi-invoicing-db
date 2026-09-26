@@ -163,6 +163,9 @@ $routes = [
     // Document email history
     'GET /documents/{id}/email-history' => 'routes/documents/getEmailHistory.php',
 
+    // Mail provider options used by authenticated document send controls
+    'GET /mail/providers' => 'routes/mail/getMailProviderOptions.php',
+
     // Delivery Notes
     'GET /delivery-notes'              => 'routes/deliveryNotes/getDeliveryNotes.php',
     'GET /delivery-notes/{id}'         => 'routes/deliveryNotes/getSingleDeliveryNote.php',

@@ -2,6 +2,7 @@
 // routes/quotations/acceptQuotation.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /quotations/{id}/accept
@@ -132,6 +133,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $quotation['created_by']],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'quotation.accepted',
+            'title' => 'Quotation Accepted',
+            'message' => "Quotation {$quotation['quotation_number']} for '{$quotation['client_name']}' was marked as accepted.",
+            'model_type' => 'Quotation',
+            'model_id' => $quotationId,
+        ]);
 
         // -------------------------------------------------------
         // 5. Return Response

@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/emailTemplates.php';
 require_once __DIR__ . '/../../utils/documentEmail.php';
@@ -161,6 +162,16 @@ try {
     $activity->bind_param('ississ', $userId, $action, $modelType, $proformaId, $description, $ip);
     $activity->execute();
     $activity->close();
+
+    createNotificationSafe($conn, [
+        'user_ids' => [(int) $proforma['created_by']],
+        'roles' => ['super_admin', 'admin'],
+        'type' => $isResend ? 'proforma.resent' : 'proforma.sent',
+        'title' => $isResend ? 'Proforma Re-sent' : 'Proforma Sent',
+        'message' => "Proforma {$proforma['proforma_number']} for '{$proforma['client_name']}' was " . ($isResend ? 're-sent' : 'sent') . " to {$recipientEmail}.",
+        'model_type' => 'ProformaInvoice',
+        'model_id' => $proformaId,
+    ]);
 
     http_response_code(200);
     echo json_encode([

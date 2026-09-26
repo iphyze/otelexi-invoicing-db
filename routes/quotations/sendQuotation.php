@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/emailTemplates.php';
 require_once __DIR__ . '/../../utils/documentEmail.php';
@@ -156,6 +157,16 @@ try {
     $activity->bind_param('ississ', $userId, $action, $modelType, $quotationId, $description, $ip);
     $activity->execute();
     $activity->close();
+
+    createNotificationSafe($conn, [
+        'user_ids' => [(int) $quotation['created_by']],
+        'roles' => ['super_admin', 'admin'],
+        'type' => $isResend ? 'quotation.resent' : 'quotation.sent',
+        'title' => $isResend ? 'Quotation Re-sent' : 'Quotation Sent',
+        'message' => "Quotation {$quotation['quotation_number']} for '{$quotation['client_name']}' was " . ($isResend ? 're-sent' : 'sent') . " to {$recipientEmail}.",
+        'model_type' => 'Quotation',
+        'model_id' => $quotationId,
+    ]);
 
     http_response_code(200);
     echo json_encode([

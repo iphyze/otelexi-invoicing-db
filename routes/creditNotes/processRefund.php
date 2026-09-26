@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/financialAdjustments.php';
 
@@ -51,7 +52,7 @@ try {
     $conn->begin_transaction();
     try {
         $noteStmt = $conn->prepare(
-            'SELECT cn.*, i.invoice_number, i.total_amount, i.amount_paid,
+            'SELECT cn.*, i.invoice_number, i.created_by AS invoice_created_by, i.total_amount, i.amount_paid,
                     i.credited_amount, i.refunded_amount, i.status AS invoice_status,
                     c.company_name AS client_name
              FROM credit_notes cn
@@ -139,6 +140,16 @@ try {
         logFinancialAction($conn, $processedBy, 'refund.processed', 'Refund', $refundId, $description);
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $note['invoice_created_by']],
+            'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+            'type' => 'refund.processed',
+            'title' => 'Refund Processed',
+            'message' => "Refund {$refundNumber} was processed against credit note {$note['credit_note_number']} for invoice {$note['invoice_number']}. Amount: {$currency} " . number_format($amount, 2) . '.',
+            'model_type' => 'Invoice',
+            'model_id' => $invoiceId,
+        ]);
 
         http_response_code(201);
         echo json_encode([

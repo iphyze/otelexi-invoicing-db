@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/paymentLinks.php';
 
@@ -38,6 +39,16 @@ try {
     $stmt->close();
 
     logFinancialAction($conn, (int) $user['id'], 'payment_link.cancelled', 'PaymentLink', $id, "{$user['email']} cancelled payment link {$link['reference']} for invoice {$link['invoice_number']}.");
+
+    createNotificationSafe($conn, [
+        'user_ids' => [(int) ($link['invoice_created_by'] ?? 0)],
+        'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+        'type' => 'payment_link.cancelled',
+        'title' => 'Payment Request Cancelled',
+        'message' => "Payment request {$link['reference']} for invoice {$link['invoice_number']} was cancelled.",
+        'model_type' => 'Invoice',
+        'model_id' => (int) $link['invoice_id'],
+    ]);
 
     echo json_encode(['status' => 'success', 'message' => 'Payment link cancelled successfully.', 'data' => paymentLinkResponse(fetchPaymentLink($conn, $id))]);
 } catch (Throwable $e) {

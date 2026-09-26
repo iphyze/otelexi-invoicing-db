@@ -7,6 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/financialAdjustments.php';
 require_once __DIR__ . '/receipt.php';
+require_once __DIR__ . '/../cron/notificationHelper.php';
 
 function paymentLinkReference(int $invoiceId): string
 {
@@ -80,7 +81,7 @@ function paymentLinkResponse(array $row): array
 function fetchPaymentLink(mysqli $conn, int $paymentLinkId): ?array
 {
     $stmt = $conn->prepare(
-        'SELECT pl.*, i.invoice_number, c.company_name AS client_name, c.email AS client_email,
+        'SELECT pl.*, i.invoice_number, i.created_by AS invoice_created_by, c.company_name AS client_name, c.email AS client_email,
                 u.name AS created_by_name, r.receipt_number
          FROM payment_links pl
          JOIN invoices i ON i.id = pl.invoice_id
@@ -264,6 +265,29 @@ function settleSuccessfulPaystackPayment(mysqli $conn, string $reference, array 
         logFinancialAction($conn, $actor, 'receipt.issued', 'Receipt', (int) $receipt['id'], "Receipt {$receipt['receipt_number']} issued from Paystack payment link {$reference}.");
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $link['invoice_created_by']],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'payment.received',
+            'title' => 'Online Payment Received',
+            'message' => "{$link['currency']} " . number_format($paymentAmount, 2)
+                . " was received through Paystack for invoice {$link['invoice_number']} ({$link['client_name']}). Receipt {$receipt['receipt_number']} was issued.",
+            'model_type' => 'Invoice',
+            'model_id' => (int) $link['invoice_id'],
+        ]);
+
+        if (($summary['status'] ?? '') === 'paid') {
+            createNotificationSafe($conn, [
+                'user_ids' => [(int) $link['invoice_created_by']],
+                'roles' => ['super_admin', 'admin', 'accounting'],
+                'type' => 'invoice.paid',
+                'title' => 'Invoice Fully Paid',
+                'message' => "Invoice {$link['invoice_number']} for '{$link['client_name']}' has been fully paid through Paystack.",
+                'model_type' => 'Invoice',
+                'model_id' => (int) $link['invoice_id'],
+            ]);
+        }
 
         return [
             'already_processed' => false,

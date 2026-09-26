@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/deliveryNotes.php';
 
@@ -142,6 +143,22 @@ try {
         );
 
         $conn->commit();
+
+        $deliveryType = match ($newStatus) {
+            'dispatched' => 'delivery_note.dispatched',
+            'delivered' => 'delivery_note.delivered',
+            'cancelled' => 'delivery_note.cancelled',
+            default => 'delivery_note.status_updated',
+        };
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $note['created_by'], (int) $note['invoice_created_by']],
+            'roles' => ['super_admin', 'admin'],
+            'type' => $deliveryType,
+            'title' => 'Delivery Note ' . deliveryNoteStatusLabel($newStatus),
+            'message' => "Delivery note {$note['delivery_note_number']} for invoice {$note['invoice_number']} was changed from " . deliveryNoteStatusLabel($currentStatus) . ' to ' . deliveryNoteStatusLabel($newStatus) . '.',
+            'model_type' => 'DeliveryNote',
+            'model_id' => $deliveryNoteId,
+        ]);
 
         http_response_code(200);
         echo json_encode([

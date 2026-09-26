@@ -2,6 +2,7 @@
 // routes/quotations/createQuotation.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /quotations
@@ -407,6 +408,16 @@ try {
 
         // Commit transaction
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [$loggedInUserId],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'quotation.created',
+            'title' => 'Quotation Created',
+            'message' => "Quotation {$quotationNumber} was created for '{$client['company_name']}'. Total: {$currency} " . number_format($totalAmount, 2) . '.',
+            'model_type' => 'Quotation',
+            'model_id' => $newQuotationId,
+        ]);
 
         // -------------------------------------------------------
         // 10. Fetch & Return Created Quotation

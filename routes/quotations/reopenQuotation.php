@@ -2,6 +2,7 @@
 // routes/quotations/reopenQuotation.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /quotations/{id}/reopen
@@ -119,6 +120,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $quotation['created_by']],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'quotation.reopened',
+            'title' => 'Quotation Reopened',
+            'message' => "Quotation {$quotation['quotation_number']} for '{$quotation['client_name']}' was reopened as a draft.",
+            'model_type' => 'Quotation',
+            'model_id' => $quotationId,
+        ]);
 
         // -------------------------------------------------------
         // 5. Return Response

@@ -2,10 +2,11 @@
 // routes/quotations/convertToInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /quotations/{id}/convert-invoice
- * Convert an accepted quotation directly to an invoice (skip proforma).
+ * Convert an eligible quotation (draft, sent or accepted) directly to an invoice (skip proforma).
  * Items can be edited during conversion.
  * Sets quotation status to 'converted'.
  * Creates invoice in 'draft' status (Admin must finalize to deduct stock).
@@ -48,7 +49,7 @@ try {
     }
 
     // -------------------------------------------------------
-    // 2. Verify Quotation Exists & Is Accepted
+    // 2. Verify Quotation Exists & Is Convertible
     // -------------------------------------------------------
     $quotationCheck = $conn->prepare("
         SELECT q.*,
@@ -71,8 +72,15 @@ try {
     $quotation = $quotationResult->fetch_assoc();
     $quotationCheck->close();
 
-    if ($quotation['status'] !== 'accepted') {
-        throw new Exception("Only accepted quotations can be converted. Current status: {$quotation['status']}.", 409);
+    $convertibleQuotationStatuses = ['draft', 'sent', 'accepted'];
+    if (!in_array($quotation['status'], $convertibleQuotationStatuses, true)) {
+        throw new Exception("This quotation cannot be converted from status '{$quotation['status']}'. Allowed statuses: draft, sent, accepted.", 409);
+    }
+
+    // A sent quotation past its expiry is treated as expired everywhere else in the app.
+    // Keep the conversion endpoint aligned with that rule so a direct API request cannot bypass it.
+    if ($quotation['status'] === 'sent' && !empty($quotation['expiry_date']) && $quotation['expiry_date'] < date('Y-m-d')) {
+        throw new Exception("This quotation has expired and cannot be converted.", 409);
     }
 
     if ($loggedInUserRole === 'sales' && (int)$quotation['created_by'] !== $loggedInUserId) {
@@ -266,6 +274,78 @@ try {
     $conn->begin_transaction();
 
     try {
+        // Lock the source quotation so concurrent conversion requests cannot
+        // create multiple proformas/invoices from the same quotation.
+        $sourceLockStmt = $conn->prepare("
+            SELECT status, created_by, expiry_date
+            FROM quotations
+            WHERE id = ?
+            FOR UPDATE
+        ");
+        $sourceLockStmt->bind_param("i", $quotationId);
+        $sourceLockStmt->execute();
+        $lockedQuotation = $sourceLockStmt->get_result()->fetch_assoc();
+        $sourceLockStmt->close();
+
+        if (!$lockedQuotation) {
+            throw new Exception("Quotation not found.", 404);
+        }
+
+        $existingInvoiceStmt = $conn->prepare("
+            SELECT id, invoice_number
+            FROM invoices
+            WHERE quotation_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+        ");
+        $existingInvoiceStmt->bind_param("i", $quotationId);
+        $existingInvoiceStmt->execute();
+        $existingInvoice = $existingInvoiceStmt->get_result()->fetch_assoc();
+        $existingInvoiceStmt->close();
+
+        if ($existingInvoice) {
+            throw new Exception(
+                "Quotation has already been converted to invoice {$existingInvoice['invoice_number']}.",
+                409
+            );
+        }
+
+        $existingProformaStmt = $conn->prepare("
+            SELECT id, proforma_number
+            FROM proforma_invoices
+            WHERE quotation_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+        ");
+        $existingProformaStmt->bind_param("i", $quotationId);
+        $existingProformaStmt->execute();
+        $existingProforma = $existingProformaStmt->get_result()->fetch_assoc();
+        $existingProformaStmt->close();
+
+        if ($existingProforma) {
+            throw new Exception(
+                "Quotation has already been converted to proforma {$existingProforma['proforma_number']}. Convert that proforma to an invoice instead.",
+                409
+            );
+        }
+
+        if (!in_array($lockedQuotation['status'], $convertibleQuotationStatuses, true)) {
+            throw new Exception(
+                "This quotation cannot be converted from status '{$lockedQuotation['status']}'. Allowed statuses: draft, sent, accepted.",
+                409
+            );
+        }
+
+        if ($lockedQuotation['status'] === 'sent' && !empty($lockedQuotation['expiry_date']) && $lockedQuotation['expiry_date'] < date('Y-m-d')) {
+            throw new Exception("This quotation has expired and cannot be converted.", 409);
+        }
+
+        $sourceStatus = $lockedQuotation['status'];
+
+        if ($loggedInUserRole === 'sales' && (int)$lockedQuotation['created_by'] !== $loggedInUserId) {
+            throw new Exception("Unauthorized: You can only convert your own quotations.", 403);
+        }
+
         $currentYear = (int)date('Y');
 
         // Get next sequence for invoice
@@ -420,10 +500,19 @@ try {
         }
         $itemStmt->close();
 
-        // Mark quotation as converted
-        $updateQuotationStmt = $conn->prepare("UPDATE quotations SET status = 'converted' WHERE id = ?");
-        $updateQuotationStmt->bind_param("i", $quotationId);
+        // Mark the quotation as converted only if it is still in the exact
+        // source status locked above.
+        $updateQuotationStmt = $conn->prepare("
+            UPDATE quotations
+            SET status = 'converted'
+            WHERE id = ? AND status = ?
+        ");
+        $updateQuotationStmt->bind_param("is", $quotationId, $sourceStatus);
         $updateQuotationStmt->execute();
+        if ($updateQuotationStmt->affected_rows !== 1) {
+            $updateQuotationStmt->close();
+            throw new Exception("Quotation status changed before conversion could complete. Please refresh and try again.", 409);
+        }
         $updateQuotationStmt->close();
 
         // Log quotation conversion
@@ -436,7 +525,7 @@ try {
         $modelType   = "Quotation";
         $itemCount   = count($finalItems);
         $itemsEdited = $hasItemsOverride ? " (items edited)" : "";
-        $description = "{$loggedInUserEmail} converted quotation {$quotation['quotation_number']} to invoice {$invoiceNumber} for '{$quotation['client_name']}'. {$itemCount} item(s){$itemsEdited}. Total: {$currency} {$totalAmount}";
+        $description = "{$loggedInUserEmail} converted quotation {$quotation['quotation_number']} from {$sourceStatus} to invoice {$invoiceNumber} for '{$quotation['client_name']}'. {$itemCount} item(s){$itemsEdited}. Total: {$currency} {$totalAmount}";
         $ipAddress   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
         $logStmt->bind_param("ississ", $loggedInUserId, $action, $modelType, $quotationId, $description, $ipAddress);
@@ -457,6 +546,16 @@ try {
 
         $conn->commit();
 
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $quotation['created_by']],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'quotation.converted_to_invoice',
+            'title' => 'Quotation Converted to Invoice',
+            'message' => "Quotation {$quotation['quotation_number']} was converted from {$sourceStatus} to invoice {$invoiceNumber} for '{$quotation['client_name']}'. The invoice is awaiting finalization.",
+            'model_type' => 'Invoice',
+            'model_id' => $newInvoiceId,
+        ]);
+
         // -------------------------------------------------------
         // 7. Return Response
         // -------------------------------------------------------
@@ -468,12 +567,14 @@ try {
                 "quotation" => [
                     "id"               => $quotationId,
                     "quotation_number" => $quotation['quotation_number'],
-                    "previous_status"  => "accepted",
+                    "previous_status"  => $sourceStatus,
                     "new_status"       => "converted"
                 ],
                 "invoice" => [
                     "id"             => $newInvoiceId,
                     "invoice_number" => $invoiceNumber,
+                    "quotation_id"   => $quotationId,
+                    "proforma_id"    => null,
                     "client_id"      => (int)$quotation['client_id'],
                     "client_name"    => $quotation['client_name'],
                     "issue_date"     => $issueDate,

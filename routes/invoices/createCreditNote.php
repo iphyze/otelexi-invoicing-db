@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/financialAdjustments.php';
 
@@ -49,7 +50,7 @@ try {
 
     try {
         $invoiceStmt = $conn->prepare(
-            'SELECT i.id, i.invoice_number, i.client_id, i.currency, i.status,
+            'SELECT i.id, i.invoice_number, i.client_id, i.created_by, i.currency, i.status,
                     i.total_amount, i.tax_amount, i.amount_paid, i.credited_amount, i.refunded_amount,
                     i.stock_deducted, c.company_name AS client_name
              FROM invoices i
@@ -173,6 +174,19 @@ try {
         logFinancialAction($conn, $issuedBy, 'credit_note.issued', 'CreditNote', $creditNoteId, $description);
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $invoice['created_by']],
+            'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+            'type' => 'credit_note.issued',
+            'title' => 'Credit Note Issued',
+            'message' => "Credit note {$number} was issued against invoice {$invoice['invoice_number']} for '{$invoice['client_name']}'. Amount: {$currency} " . number_format($amount, 2) . '.',
+            // Credit notes are managed inside the invoice detail screen, so link
+            // the notification to the parent invoice rather than an orphaned
+            // credit-note id with no standalone frontend route.
+            'model_type' => 'Invoice',
+            'model_id' => $invoiceId,
+        ]);
 
         http_response_code(201);
         echo json_encode([

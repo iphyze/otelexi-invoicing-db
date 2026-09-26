@@ -174,22 +174,16 @@ try {
 
         $conn->commit();
 
-        // ============================================================
-        // 3. cancelInvoice.php
-        //    Add after: $conn->commit();
-        // ============================================================
-        
-        // Notify the Sales person who created the invoice
-        createNotification($conn, [
-            'user_id'    => (int)$invoice['created_by'],
-            'type'       => 'invoice.cancelled',
-            'title'      => 'Invoice Cancelled',
-            'message'    => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' "
-                        . "has been cancelled." . ($reason ? " Reason: {$reason}" : ""),
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $invoice['created_by']],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'invoice.cancelled',
+            'title' => 'Invoice Cancelled',
+            'message' => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' was cancelled."
+                . ($reason ? " Reason: {$reason}" : ''),
             'model_type' => 'Invoice',
-            'model_id'   => $invoiceId
+            'model_id' => $invoiceId,
         ]);
-        
 
         $response = [
             "status"  => "success",

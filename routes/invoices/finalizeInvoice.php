@@ -74,7 +74,7 @@ try {
     // -------------------------------------------------------
     $itemsStmt = $conn->prepare("
         SELECT ii.id, ii.product_id, ii.description, ii.quantity,
-               p.name AS product_name, p.stock_quantity
+               p.name AS product_name, p.stock_quantity, p.reorder_level
         FROM invoice_items ii
         LEFT JOIN products p ON p.id = ii.product_id
         WHERE ii.invoice_id = ?
@@ -91,6 +91,7 @@ try {
     // 3. Pre-flight stock availability check (before any writes)
     // -------------------------------------------------------
     $stockDeductions = []; // [product_id => quantity_to_deduct]
+    $stockMeta       = []; // [product_id => name/current_stock/reorder_level]
     $stockErrors     = [];
 
     foreach ($items as $item) {
@@ -102,6 +103,11 @@ try {
 
         // Accumulate required qty per product (handles duplicate products on same invoice)
         $stockDeductions[$productId] = ($stockDeductions[$productId] ?? 0) + $qtyRequired;
+        $stockMeta[$productId] = [
+            'name' => (string) $item['product_name'],
+            'stock_quantity' => $stockAvailable,
+            'reorder_level' => (float) ($item['reorder_level'] ?? 0),
+        ];
 
         if ($stockAvailable < $stockDeductions[$productId]) {
             $stockErrors[] = "'{$item['product_name']}': requires {$stockDeductions[$productId]}, available {$stockAvailable}.";
@@ -121,6 +127,8 @@ try {
     // -------------------------------------------------------
     // 4. Transaction: deduct stock, update invoice, log
     // -------------------------------------------------------
+    $lowStockAlerts = [];
+
     $conn->begin_transaction();
 
     try {
@@ -136,27 +144,20 @@ try {
                 throw new Exception("Failed to deduct stock for product ID {$productId}: " . $deductStmt->error, 500);
             }
 
-            // Per-stock low-stock notifications (fire for each product that hits reorder level)
-            // Add this inside finalizeInvoice.php, inside the foreach ($stockDeductions ...) loop,
-            // after the deduct stmt executes successfully:
+            $deductStmt->close();
 
-            $newStock = $product['stock_quantity'] - $qtyToDeduct;  // from preflight data
-            if ($newStock <= $product['reorder_level']) {
-                foreach (['super_admin', 'admin'] as $alertRole) {
-                    createNotification($conn, [
-                        'role'       => $alertRole,
-                        'type'       => 'stock.low',
-                        'title'      => 'Low Stock Alert',
-                        'message'    => "'{$product['product_name']}' stock is now {$newStock} units "
-                                        . "(reorder level: {$product['reorder_level']}).",
-                        'model_type' => 'Product',
-                        'model_id'   => $productId
-                    ]);
+            $meta = $stockMeta[$productId] ?? null;
+            if ($meta) {
+                $newStock = round((float) $meta['stock_quantity'] - (float) $qtyToDeduct, 2);
+                if ($newStock <= (float) $meta['reorder_level']) {
+                    $lowStockAlerts[] = [
+                        'product_id' => $productId,
+                        'product_name' => $meta['name'],
+                        'stock_quantity' => $newStock,
+                        'reorder_level' => (float) $meta['reorder_level'],
+                    ];
                 }
             }
-
-
-            $deductStmt->close();
 
             // Log per-product stock movement
             $stockLogStmt = $conn->prepare("
@@ -215,34 +216,27 @@ try {
         $conn->commit();
 
 
-        // ============================================================
-        // 1. finalizeInvoice.php
-        //    Add after: $conn->commit();
-        // ============================================================
-        
-        // Notify the Sales staff member who created the invoice
-        createNotification($conn, [
-            'user_id'    => (int)$invoice['created_by'],
-            'type'       => 'invoice.finalized',
-            'title'      => 'Invoice Finalized',
-            'message'    => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' "
-                        . "has been finalized. Amount: {$invoice['currency']} {$invoice['total_amount']}. "
-                        . "Due: {$invoice['due_date']}.",
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $invoice['created_by']],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'invoice.finalized',
+            'title' => 'Invoice Finalized',
+            'message' => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' was finalized and is now awaiting payment. Total: {$invoice['currency']} " . number_format((float) $invoice['total_amount'], 2) . ". Due: {$invoice['due_date']}.",
             'model_type' => 'Invoice',
-            'model_id'   => $invoiceId
+            'model_id' => $invoiceId,
         ]);
 
-        // Notify all accounting users so they know a new invoice is outstanding
-        createNotification($conn, [
-            'role'       => 'accounting',
-            'type'       => 'invoice.finalized',
-            'title'      => 'New Invoice Sent',
-            'message'    => "Invoice {$invoice['invoice_number']} ({$invoice['currency']} {$invoice['total_amount']}) "
-                        . "for '{$invoice['client_name']}' is now sent and awaiting payment.",
-            'model_type' => 'Invoice',
-            'model_id'   => $invoiceId
-        ]);
-
+        foreach ($lowStockAlerts as $alert) {
+            createNotificationSafe($conn, [
+                'roles' => ['super_admin', 'admin'],
+                'type' => 'stock.low',
+                'title' => 'Low Stock Alert',
+                'message' => "{$alert['product_name']} is now at {$alert['stock_quantity']} "
+                    . "(reorder level: {$alert['reorder_level']}).",
+                'model_type' => 'Product',
+                'model_id' => $alert['product_id'],
+            ]);
+        }
 
         http_response_code(200);
         echo json_encode([

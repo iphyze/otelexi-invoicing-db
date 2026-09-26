@@ -2,6 +2,7 @@
 // routes/invoices/createInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /invoices/create
@@ -370,6 +371,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [$loggedInUserId],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'invoice.created',
+            'title' => 'Invoice Created',
+            'message' => "Invoice {$invoiceNumber} was created for '{$client['company_name']}'. Total: {$currency} " . number_format($totalAmount, 2) . '. It is awaiting finalization.',
+            'model_type' => 'Invoice',
+            'model_id' => $newInvoiceId,
+        ]);
 
         http_response_code(201);
         echo json_encode([

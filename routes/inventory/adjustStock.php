@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/inventory.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Africa/Lagos');
@@ -54,7 +55,7 @@ try {
 
     try {
         $productStmt = $conn->prepare(
-            'SELECT id, name, sku, stock_quantity, unit_of_measure, is_active
+            'SELECT id, name, sku, stock_quantity, reorder_level, unit_of_measure, is_active
              FROM products WHERE id = ? LIMIT 1 FOR UPDATE'
         );
         $productStmt->bind_param('i', $productId);
@@ -160,6 +161,26 @@ try {
         ]);
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN],
+            'type' => 'stock.adjusted',
+            'title' => 'Stock Adjusted',
+            'message' => "{$product['name']} ({$product['sku']}) stock was adjusted from {$before} to {$after}. Reason: " . ucwords(str_replace('_', ' ', $reasonCode)) . '.',
+            'model_type' => 'Product',
+            'model_id' => $productId,
+        ]);
+
+        if ($after <= (float) ($product['reorder_level'] ?? 0)) {
+            createNotificationSafe($conn, [
+                'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN],
+                'type' => 'stock.low',
+                'title' => 'Low Stock Alert',
+                'message' => "{$product['name']} ({$product['sku']}) is at {$after}, at or below its reorder level of {$product['reorder_level']}.",
+                'model_type' => 'Product',
+                'model_id' => $productId,
+            ]);
+        }
 
         http_response_code(201);
         echo json_encode([

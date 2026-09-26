@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/paymentLinks.php';
 require_once __DIR__ . '/../../utils/paystackClient.php';
@@ -44,7 +45,7 @@ try {
     $mailProvider = $sendEmail ? requestedMailProviderFromRequest($data) : 'system';
 
     $invoiceStmt = $conn->prepare(
-        'SELECT i.id, i.invoice_number, i.client_id, i.status, i.total_amount, i.amount_paid,
+        'SELECT i.id, i.invoice_number, i.client_id, i.created_by AS invoice_created_by, i.status, i.total_amount, i.amount_paid,
                 i.credited_amount, i.refunded_amount, i.balance_due, i.currency, i.due_date,
                 c.company_name AS client_name, c.email AS client_email
          FROM invoices i
@@ -213,6 +214,16 @@ try {
             logFinancialAction($conn, (int) $user['id'], 'payment_link.email_failed', 'PaymentLink', $paymentLinkId, "{$user['email']} created payment link {$reference}, but the email delivery failed.");
         }
     }
+
+    createNotificationSafe($conn, [
+        'user_ids' => [(int) $invoice['invoice_created_by']],
+        'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+        'type' => 'payment_link.created',
+        'title' => 'Payment Request Created',
+        'message' => ucfirst($provider) . " payment request {$reference} was created for invoice {$invoice['invoice_number']} ({$invoice['currency']} " . number_format($amount, 2) . ').',
+        'model_type' => 'Invoice',
+        'model_id' => $invoiceId,
+    ]);
 
     $message = $provider === 'paystack'
         ? ($emailSent ? 'Paystack checkout link created and emailed to the client.' : 'Paystack checkout link created successfully.')

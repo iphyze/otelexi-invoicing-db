@@ -153,6 +153,70 @@ function supportedMailProviders(): array
     return ['zoho', 'brevo'];
 }
 
+/**
+ * Return the non-sensitive provider choices used by authenticated send controls.
+ * Only enabled providers are exposed as explicit choices; "system" remains the
+ * frontend's default and resolves through the configured routing settings.
+ */
+function mailProviderSelectionSummary(): array
+{
+    $routing = resolvedMailRoutingSettings();
+    $labels = [
+        'zoho' => 'Zoho Mail',
+        'brevo' => 'Brevo',
+    ];
+
+    $providers = [];
+    foreach (supportedMailProviders() as $provider) {
+        $enabledKey = $provider . '_enabled';
+        if (empty($routing[$enabledKey])) {
+            continue;
+        }
+
+        $providers[] = [
+            'value' => $provider,
+            'label' => $labels[$provider] ?? ucfirst($provider),
+            'is_default' => $provider === ($routing['default_provider'] ?? null),
+        ];
+    }
+
+    return [
+        'default_provider' => (string) ($routing['default_provider'] ?? 'zoho'),
+        'fallback_enabled' => (bool) ($routing['fallback_enabled'] ?? false),
+        'fallback_provider' => $routing['fallback_provider'] ?? null,
+        'providers' => $providers,
+    ];
+}
+
+/**
+ * Resolve an optional mail_provider selection from either a supplied decoded
+ * payload, a multipart/form-data POST body, or a JSON request body.
+ */
+function requestedMailProviderFromRequest(?array $payload = null): string
+{
+    if ($payload === null) {
+        if (isset($_POST['mail_provider'])) {
+            $payload = ['mail_provider' => $_POST['mail_provider']];
+        } else {
+            $payload = [];
+            $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+
+            if (str_contains($contentType, 'application/json')) {
+                $rawBody = file_get_contents('php://input');
+                if (is_string($rawBody) && trim($rawBody) !== '') {
+                    $decoded = json_decode($rawBody, true);
+                    if (is_array($decoded)) {
+                        $payload = $decoded;
+                    }
+                }
+            }
+        }
+    }
+
+    $requested = trim((string) ($payload['mail_provider'] ?? 'system'));
+    return normalizeMailProvider($requested === '' ? 'system' : $requested);
+}
+
 function normalizeMailProvider(string $provider, bool $allowSystem = true): string
 {
     $provider = strtolower(trim($provider));

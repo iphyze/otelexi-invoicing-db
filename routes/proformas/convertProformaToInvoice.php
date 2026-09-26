@@ -2,10 +2,11 @@
 // routes/proformas/convertProformaToInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /proforma/{id}/convert-invoice
- * Convert an APPROVED proforma invoice to a final invoice.
+ * Convert an eligible proforma invoice (draft, sent or approved) to a final invoice.
  * - Items can be edited during conversion.
  * - Sets proforma status to 'converted'.
  * - Creates invoice in 'draft' status (Admin finalizes to lock + deduct stock).
@@ -66,7 +67,7 @@ try {
     $data = $data ?: [];
 
     // -------------------------------------------------------
-    // 1. Verify proforma exists and is approved
+    // 1. Verify proforma exists and is convertible
     // -------------------------------------------------------
     $checkStmt = $conn->prepare("
         SELECT p.*,
@@ -86,8 +87,15 @@ try {
     if (!$proforma) {
         throw new Exception("Proforma invoice not found.", 404);
     }
-    if ($proforma['status'] !== 'approved') {
-        throw new Exception("Only approved proforma invoices can be converted. Current status: {$proforma['status']}.", 409);
+    $convertibleProformaStatuses = ['draft', 'sent', 'approved'];
+    if (!in_array($proforma['status'], $convertibleProformaStatuses, true)) {
+        throw new Exception("This proforma cannot be converted from status '{$proforma['status']}'. Allowed statuses: draft, sent, approved.", 409);
+    }
+
+    // Sent proformas past their expiry are treated as expired by the read endpoints.
+    // Enforce the same rule here so conversion cannot be forced through the API.
+    if ($proforma['status'] === 'sent' && !empty($proforma['expiry_date']) && $proforma['expiry_date'] < date('Y-m-d')) {
+        throw new Exception("This proforma has expired and cannot be converted.", 409);
     }
     if ($loggedInUserRole === 'sales' && (int)$proforma['created_by'] !== $loggedInUserId) {
         throw new Exception("Unauthorized: You can only convert your own proforma invoices.", 403);
@@ -265,6 +273,103 @@ try {
     $conn->begin_transaction();
 
     try {
+        // Lock the source proforma to prevent duplicate invoices when users
+        // double-submit or two requests reach the API at the same time.
+        $sourceLockStmt = $conn->prepare("
+            SELECT status, created_by, quotation_id, expiry_date
+            FROM proforma_invoices
+            WHERE id = ?
+            FOR UPDATE
+        ");
+        $sourceLockStmt->bind_param("i", $proformaId);
+        $sourceLockStmt->execute();
+        $lockedProforma = $sourceLockStmt->get_result()->fetch_assoc();
+        $sourceLockStmt->close();
+
+        if (!$lockedProforma) {
+            throw new Exception("Proforma invoice not found.", 404);
+        }
+
+        $existingInvoiceStmt = $conn->prepare("
+            SELECT id, invoice_number
+            FROM invoices
+            WHERE proforma_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+        ");
+        $existingInvoiceStmt->bind_param("i", $proformaId);
+        $existingInvoiceStmt->execute();
+        $existingInvoice = $existingInvoiceStmt->get_result()->fetch_assoc();
+        $existingInvoiceStmt->close();
+
+        if ($existingInvoice) {
+            throw new Exception(
+                "Proforma has already been converted to invoice {$existingInvoice['invoice_number']}.",
+                409
+            );
+        }
+
+        $lockedQuotationId = $lockedProforma['quotation_id'] ? (int)$lockedProforma['quotation_id'] : null;
+        if ($lockedQuotationId) {
+            // Lock the originating quotation as well. Quotation-to-invoice uses
+            // the same row lock, so inconsistent/manual status resets still
+            // cannot produce two invoices concurrently through different paths.
+            $quotationLockStmt = $conn->prepare("
+                SELECT id
+                FROM quotations
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $quotationLockStmt->bind_param("i", $lockedQuotationId);
+            $quotationLockStmt->execute();
+            $lockedQuotation = $quotationLockStmt->get_result()->fetch_assoc();
+            $quotationLockStmt->close();
+
+            if (!$lockedQuotation) {
+                throw new Exception("Source quotation linked to this proforma no longer exists.", 409);
+            }
+
+            $quotationInvoiceStmt = $conn->prepare("
+                SELECT id, invoice_number
+                FROM invoices
+                WHERE quotation_id = ?
+                ORDER BY id ASC
+                LIMIT 1
+            ");
+            $quotationInvoiceStmt->bind_param("i", $lockedQuotationId);
+            $quotationInvoiceStmt->execute();
+            $quotationInvoice = $quotationInvoiceStmt->get_result()->fetch_assoc();
+            $quotationInvoiceStmt->close();
+
+            if ($quotationInvoice) {
+                throw new Exception(
+                    "Invoice {$quotationInvoice['invoice_number']} already exists for the source quotation. Another invoice cannot be created from this proforma.",
+                    409
+                );
+            }
+        }
+
+        if (!in_array($lockedProforma['status'], $convertibleProformaStatuses, true)) {
+            throw new Exception(
+                "This proforma cannot be converted from status '{$lockedProforma['status']}'. Allowed statuses: draft, sent, approved.",
+                409
+            );
+        }
+
+        if ($lockedProforma['status'] === 'sent' && !empty($lockedProforma['expiry_date']) && $lockedProforma['expiry_date'] < date('Y-m-d')) {
+            throw new Exception("This proforma has expired and cannot be converted.", 409);
+        }
+
+        $sourceStatus = $lockedProforma['status'];
+
+        if ($loggedInUserRole === 'sales' && (int)$lockedProforma['created_by'] !== $loggedInUserId) {
+            throw new Exception("Unauthorized: You can only convert your own proforma invoices.", 403);
+        }
+
+        // Keep the lineage value used for the insert synchronized with the
+        // locked source row rather than the earlier unlocked snapshot.
+        $linkedQuotationId = $lockedQuotationId;
+
         $currentYear = (int)date('Y');
 
         $seqCheck = $conn->prepare("
@@ -384,10 +489,19 @@ try {
         }
         $itemStmt->close();
 
-        // Mark proforma as converted
-        $updateProformaStmt = $conn->prepare("UPDATE proforma_invoices SET status = 'converted' WHERE id = ?");
-        $updateProformaStmt->bind_param("i", $proformaId);
+        // Mark the proforma as converted only if it is still in the exact
+        // source status locked above.
+        $updateProformaStmt = $conn->prepare("
+            UPDATE proforma_invoices
+            SET status = 'converted'
+            WHERE id = ? AND status = ?
+        ");
+        $updateProformaStmt->bind_param("is", $proformaId, $sourceStatus);
         $updateProformaStmt->execute();
+        if ($updateProformaStmt->affected_rows !== 1) {
+            $updateProformaStmt->close();
+            throw new Exception("Proforma status changed before conversion could complete. Please refresh and try again.", 409);
+        }
         $updateProformaStmt->close();
 
         // Log proforma conversion
@@ -399,7 +513,7 @@ try {
         $modelType   = "ProformaInvoice";
         $itemCount   = count($finalItems);
         $itemsEdited = $hasItemsOverride ? " (items edited during conversion)" : "";
-        $description = "{$loggedInUserEmail} converted proforma {$proforma['proforma_number']} to invoice {$invoiceNumber} for '{$proforma['client_name']}'. {$itemCount} item(s){$itemsEdited}. Total: {$currency} {$totalAmount}";
+        $description = "{$loggedInUserEmail} converted proforma {$proforma['proforma_number']} from {$sourceStatus} to invoice {$invoiceNumber} for '{$proforma['client_name']}'. {$itemCount} item(s){$itemsEdited}. Total: {$currency} {$totalAmount}";
         $ipAddress   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
         $logStmt->bind_param("ississ", $loggedInUserId, $action, $modelType, $proformaId, $description, $ipAddress);
@@ -420,6 +534,16 @@ try {
 
         $conn->commit();
 
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $proforma['created_by']],
+            'roles' => ['super_admin', 'admin', 'accounting'],
+            'type' => 'proforma.converted_to_invoice',
+            'title' => 'Proforma Converted to Invoice',
+            'message' => "Proforma {$proforma['proforma_number']} was converted from {$sourceStatus} to invoice {$invoiceNumber} for '{$proforma['client_name']}'. The invoice is awaiting finalization.",
+            'model_type' => 'Invoice',
+            'model_id' => $newInvoiceId,
+        ]);
+
         // -------------------------------------------------------
         // 6. Return response
         // -------------------------------------------------------
@@ -431,7 +555,7 @@ try {
                 "proforma" => [
                     "id"              => $proformaId,
                     "proforma_number" => $proforma['proforma_number'],
-                    "previous_status" => "approved",
+                    "previous_status" => $sourceStatus,
                     "new_status"      => "converted"
                 ],
                 "invoice" => [

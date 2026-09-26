@@ -120,31 +120,27 @@ try {
         throw $transactionError;
     }
 
-    try {
-        if ((int) $invoice['created_by'] !== $loggedInUserId) {
-            createNotification($conn, [
-                'user_id' => (int) $invoice['created_by'],
-                'type' => 'payment.received',
-                'title' => 'Payment Received',
-                'message' => "{$invoice['currency']} {$amount} received on invoice {$invoice['invoice_number']} ({$invoice['client_name']}). Receipt {$receipt['receipt_number']} issued.",
-                'model_type' => 'Payment',
-                'model_id' => $newPaymentId,
-            ]);
-        }
-        if ($summary['status'] === 'paid') {
-            foreach ([ROLE_SUPER_ADMIN, ROLE_ADMIN] as $alertRole) {
-                createNotification($conn, [
-                    'role' => $alertRole,
-                    'type' => 'invoice.paid',
-                    'title' => 'Invoice Fully Paid',
-                    'message' => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' has been fully paid.",
-                    'model_type' => 'Invoice',
-                    'model_id' => $invoiceId,
-                ]);
-            }
-        }
-    } catch (Throwable $notificationError) {
-        error_log('Payment Notification Error: ' . $notificationError->getMessage());
+    createNotificationSafe($conn, [
+        'user_ids' => [(int) $invoice['created_by']],
+        'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+        'type' => 'payment.received',
+        'title' => 'Payment Received',
+        'message' => "{$invoice['currency']} " . number_format($amount, 2)
+            . " was received on invoice {$invoice['invoice_number']} ({$invoice['client_name']}). Receipt {$receipt['receipt_number']} was issued.",
+        'model_type' => 'Invoice',
+        'model_id' => $invoiceId,
+    ]);
+
+    if ($summary['status'] === 'paid') {
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $invoice['created_by']],
+            'roles' => [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING],
+            'type' => 'invoice.paid',
+            'title' => 'Invoice Fully Paid',
+            'message' => "Invoice {$invoice['invoice_number']} for '{$invoice['client_name']}' has been fully paid.",
+            'model_type' => 'Invoice',
+            'model_id' => $invoiceId,
+        ]);
     }
 
     http_response_code(201);

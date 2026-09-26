@@ -2,6 +2,7 @@
 // routes/proformas/createProforma.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /proformas/create
@@ -369,6 +370,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [$loggedInUserId],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'proforma.created',
+            'title' => 'Proforma Created',
+            'message' => "Proforma {$proformaNumber} was created for '{$client['company_name']}'. Total: {$currency} " . number_format($totalAmount, 2) . '.',
+            'model_type' => 'ProformaInvoice',
+            'model_id' => $newProformaId,
+        ]);
 
         // -------------------------------------------------------
         // 7. Return created proforma

@@ -2,6 +2,7 @@
 // routes/quotations/rejectQuotation.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /quotations/{id}/reject
@@ -133,6 +134,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $quotation['created_by']],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'quotation.rejected',
+            'title' => 'Quotation Rejected',
+            'message' => "Quotation {$quotation['quotation_number']} for '{$quotation['client_name']}' was rejected." . ($reason ? " Reason: {$reason}" : ''),
+            'model_type' => 'Quotation',
+            'model_id' => $quotationId,
+        ]);
 
         // -------------------------------------------------------
         // 5. Return Response

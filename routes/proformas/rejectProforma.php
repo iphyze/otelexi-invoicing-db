@@ -2,6 +2,7 @@
 // routes/proformas/rejectProforma.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
  * POST /proforma/{id}/reject
@@ -95,6 +96,16 @@ try {
         $logStmt->close();
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $proforma['created_by']],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'proforma.rejected',
+            'title' => 'Proforma Rejected',
+            'message' => "Proforma {$proforma['proforma_number']} for '{$proforma['client_name']}' was rejected." . ($reason ? " Reason: {$reason}" : ''),
+            'model_type' => 'ProformaInvoice',
+            'model_id' => $proformaId,
+        ]);
 
         http_response_code(200);
         echo json_encode([

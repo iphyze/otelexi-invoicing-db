@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../cron/notificationHelper.php';
 require_once __DIR__ . '/../../includes/roles.php';
 require_once __DIR__ . '/../../utils/deliveryNotes.php';
 
@@ -262,6 +263,16 @@ try {
         );
 
         $conn->commit();
+
+        createNotificationSafe($conn, [
+            'user_ids' => [(int) $invoice['created_by'], $userId],
+            'roles' => ['super_admin', 'admin'],
+            'type' => 'delivery_note.created',
+            'title' => 'Delivery Note Created',
+            'message' => "Delivery note {$deliveryNoteNumber} was created for invoice {$invoice['invoice_number']} ({$invoice['client_name']}).",
+            'model_type' => 'DeliveryNote',
+            'model_id' => $deliveryNoteId,
+        ]);
 
         http_response_code(201);
         echo json_encode([
