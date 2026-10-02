@@ -2,6 +2,7 @@
 // routes/invoices/createInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
@@ -127,13 +128,11 @@ try {
 
     // Payment terms: override or client default
     $paymentTerms = isset($data['payment_terms']) ? strtolower(trim($data['payment_terms'])) : $client['payment_terms'];
-    if (!in_array($paymentTerms, ['due_on_receipt', 'net_7'])) {
-        throw new Exception("Invalid payment_terms. Must be 'due_on_receipt' or 'net_7'.", 422);
+    if (!isValidPaymentTerm($paymentTerms)) {
+        throw new Exception("Invalid payment_terms. Use due_on_receipt, net_7, net_15, or net_30.", 422);
     }
 
-    $dueDate = ($paymentTerms === 'due_on_receipt')
-        ? $issueDate
-        : date('Y-m-d', strtotime($issueDate . ' + 7 days'));
+    $dueDate = calculatePaymentDueDate($issueDate, $paymentTerms);
 
     // -------------------------------------------------------
     // 4. Validate & calculate line items

@@ -2,6 +2,7 @@
 // routes/clients/updateClient.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 
 /**
  * PUT /clients/update
@@ -79,7 +80,7 @@ try {
         if ($key === 'currency' && !in_array($value, ['NGN', 'USD'])) {
             throw new Exception("Invalid currency. Must be 'NGN' or 'USD'.", 422);
         }
-        if ($key === 'payment_terms' && !in_array($value, ['due_on_receipt', 'net_7'])) {
+        if ($key === 'payment_terms' && !isValidPaymentTerm($value)) {
             throw new Exception("Invalid payment terms.", 422);
         }
         if ($key === 'is_active') {

@@ -2,6 +2,7 @@
 // routes/invoices/updateInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 
 /**
  * PUT /invoices/edit/{id}
@@ -184,7 +185,7 @@ try {
 
             case 'payment_terms':
                 $value = strtolower($value);
-                if (!in_array($value, ['due_on_receipt', 'net_7'])) throw new Exception("Invalid payment_terms.", 422);
+                if (!isValidPaymentTerm($value)) throw new Exception("Invalid payment_terms.", 422);
                 break;
 
             case 'issue_date':
@@ -244,9 +245,7 @@ try {
     // Recalculate due_date if issue_date or payment_terms changed
     $newIssueDate    = isset($data['issue_date']) ? trim($data['issue_date']) : $existing['issue_date'];
     $newPaymentTerms = isset($data['payment_terms']) ? strtolower(trim($data['payment_terms'])) : $existing['payment_terms'];
-    $newDueDate      = ($newPaymentTerms === 'due_on_receipt')
-        ? $newIssueDate
-        : date('Y-m-d', strtotime($newIssueDate . ' + 7 days'));
+    $newDueDate      = calculatePaymentDueDate($newIssueDate, $newPaymentTerms);
 
     $updateFields[] = "`due_date` = ?";      $params[] = $newDueDate;           $types .= "s";
     $updateFields[] = "`subtotal` = ?";      $params[] = $calculatedSubtotal;   $types .= "d";

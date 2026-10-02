@@ -101,7 +101,7 @@ try {
                 "phone"           => "string (required)",
                 "tax_id"          => "string (optional — client VAT/TIN)",
                 "currency"        => "enum: NGN|USD (optional, default: NGN)",
-                "payment_terms"   => "enum: due_on_receipt|net_7 (optional, default: due_on_receipt)"
+                "payment_terms"   => "enum: due_on_receipt|net_7|net_15|net_30 (optional, default: due_on_receipt)"
             ]
         ),
         $ep("GET",    "{$base}/clients/{id}",               "Get single client with contacts.", true, ["admin","sales","accounting"]),
@@ -233,7 +233,7 @@ try {
         $ep("POST",   "{$base}/quotations/{id}/convert-invoice",     "Convert quotation directly to invoice (skip proforma). Items editable.", true, ["admin","sales"],
             [
                 "items"         => "array (optional) — editable items for conversion",
-                "payment_terms" => "enum: due_on_receipt|net_7 (optional, default: client setting)"
+                "payment_terms" => "enum: due_on_receipt|net_7|net_15|net_30 (optional, default: client setting)"
             ]
         ),
         $ep("GET",    "{$base}/quotations/{id}/pdf",                 "Download quotation as PDF.", true, ["admin","sales"]),
@@ -275,7 +275,7 @@ try {
         $ep("POST",   "{$base}/proformas/{id}/convert-invoice",      "Convert approved proforma to final invoice. Items editable.", true, ["admin","sales"],
             [
                 "items"         => "array (optional — editable items)",
-                "payment_terms" => "enum: due_on_receipt|net_7 (optional)"
+                "payment_terms" => "enum: due_on_receipt|net_7|net_15|net_30 (optional)"
             ]
         ),
         $ep("GET",    "{$base}/proformas/{id}/pdf",                  "Download proforma as PDF.", true, ["admin","sales"]),
@@ -303,7 +303,7 @@ try {
                 "client_id"      => "integer (required if no proforma/quotation)",
                 "currency"       => "enum: NGN|USD (optional)",
                 "exchange_rate"  => "decimal (required if USD)",
-                "payment_terms"  => "enum: due_on_receipt|net_7 (required)",
+                "payment_terms"  => "enum: due_on_receipt|net_7|net_15|net_30 (required)",
                 "discount_type"  => "enum: percentage|none (optional)",
                 "discount_value" => "decimal (optional)",
                 "notes"          => "string (optional)",
@@ -534,7 +534,7 @@ try {
             "Prices and tax rates are snapshotted at document creation. Historical documents are immutable.",
             "Document numbers format: TYPE/YYYY/NNN (e.g. INV/2026/001). Resets every January.",
             "Quotation validity is always 14 days from issue_date.",
-            "Payment terms: due_on_receipt (due_date = issue_date) or net_7 (due_date = issue_date + 7 days).",
+            "Payment terms: due_on_receipt (same-day due), net_7 (+7 days), net_15 (+15 days), or net_30 (+30 days).",
             "Sales staff can only see/edit their own documents. Admin sees everything.",
             "Soft-delete pattern: is_active=0 on clients/products/users. Never hard-delete.",
             "Pagination: all list endpoints support ?page=1&per_page=20. Response includes meta: {current_page, per_page, total, last_page}.",

@@ -2,6 +2,7 @@
 // routes/clients/createClient.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 
 /**
  * POST /clients
@@ -58,9 +59,9 @@ if (isset($data['currency']) && !in_array($data['currency'], ['NGN', 'USD'])) {
     exit;
 }
 
-if (isset($data['payment_terms']) && !in_array($data['payment_terms'], ['due_on_receipt', 'net_7'])) {
+if (isset($data['payment_terms']) && !isValidPaymentTerm($data['payment_terms'])) {
     http_response_code(422);
-    echo json_encode(["status" => "Failed", "message" => "Invalid payment terms. Must be 'due_on_receipt' or 'net_7'."]);
+    echo json_encode(["status" => "Failed", "message" => "Invalid payment terms. Use due_on_receipt, net_7, net_15, or net_30."]);
     exit;
 }
 

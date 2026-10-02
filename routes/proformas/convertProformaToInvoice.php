@@ -2,6 +2,7 @@
 // routes/proformas/convertProformaToInvoice.php
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 require_once __DIR__ . '/../../cron/notificationHelper.php';
 
 /**
@@ -241,17 +242,15 @@ try {
 
     // Payment terms (override > client default)
     $paymentTerms = isset($data['payment_terms']) ? strtolower(trim($data['payment_terms'])) : $proforma['client_payment_terms'];
-    if (!in_array($paymentTerms, ['due_on_receipt', 'net_7'])) {
-        throw new Exception("Invalid payment_terms. Must be 'due_on_receipt' or 'net_7'.", 422);
+    if (!isValidPaymentTerm($paymentTerms)) {
+        throw new Exception("Invalid payment_terms. Use due_on_receipt, net_7, net_15, or net_30.", 422);
     }
 
     $issueDate = isset($data['issue_date']) && DateTime::createFromFormat('Y-m-d', trim($data['issue_date']))
         ? trim($data['issue_date'])
         : date('Y-m-d');
 
-    $dueDate = ($paymentTerms === 'due_on_receipt')
-        ? $issueDate
-        : date('Y-m-d', strtotime($issueDate . ' + 7 days'));
+    $dueDate = calculatePaymentDueDate($issueDate, $paymentTerms);
 
     $notes    = isset($data['notes']) ? trim($data['notes']) : $proforma['notes'];
     $currency = $proforma['currency'];

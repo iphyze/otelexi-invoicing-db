@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../vendor/autoload.php';
 require_once __DIR__ . '/../../includes/connection.php';
 require_once __DIR__ . '/../../includes/authMiddleware.php';
+require_once __DIR__ . '/../../utils/paymentTerms.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/emailTemplates.php';
 require_once __DIR__ . '/../../utils/documentEmail.php';
@@ -84,7 +85,7 @@ try {
     $currencySymbol = $invoice['currency'] === 'USD' ? '$' : '₦';
     $issueDate = date('d M Y', strtotime((string) $invoice['issue_date']));
     $dueDate = date('d M Y', strtotime((string) $invoice['due_date']));
-    $paymentTerms = $invoice['payment_terms'] === 'net_7' ? 'Net 7 Days' : 'Due on Receipt';
+    $paymentTerms = paymentTermLabel($invoice['payment_terms']);
     $subject = "Invoice {$invoice['invoice_number']} from {$companyName}";
 
     $emailData = [
