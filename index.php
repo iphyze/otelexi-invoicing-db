@@ -91,6 +91,10 @@ $routes = [
 
 
     // PRODUCTS  
+    'POST /products/import/preview' => 'routes/products/import/preview.php',
+    'POST /products/import' => 'routes/products/import/commit.php',
+    'POST /products/import/commit' => 'routes/products/import/commit.php',
+    'POST /products/import/save' => 'routes/products/import/commit.php',
     'GET /products'  => 'routes/products/getFilteredRequest.php',
     'GET /products/{id}'  => 'routes/products/getSingleProduct.php',
     'POST /products/create'  => 'routes/products/createProduct.php',
@@ -162,8 +166,6 @@ $routes = [
 
     // Document email history
     'GET /documents/{id}/email-history' => 'routes/documents/getEmailHistory.php',
-
-    // Mail provider options used by authenticated document send controls
     'GET /mail/providers' => 'routes/mail/getMailProviderOptions.php',
 
     // Delivery Notes

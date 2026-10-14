@@ -3,592 +3,593 @@
 declare(strict_types=1);
 
 /**
- * Shared validation/normalisation helpers for bulk product imports.
- *
- * The frontend parses the Excel file and sends rows as JSON. This keeps the
- * API independent from a server-side spreadsheet library while still making
- * the backend the source of truth for validation before preview and commit.
+ * Shared helpers for bulk product import preview + commit.
+ * The frontend has evolved over time, so the normalizer intentionally accepts
+ * both the current normalized keys and the human-readable Excel header names.
  */
 
-function productImportAllowedUnits(): array
+function productImportString(array $row, array $keys, string $default = ''): string
 {
-    return ['single', 'set', 'carton', 'dozen'];
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row) && $row[$key] !== null) {
+            return trim((string) $row[$key]);
+        }
+    }
+    return $default;
 }
 
-function productImportAllowedTaxTypes(): array
+function productImportValue(array $row, array $keys, mixed $default = null): mixed
 {
-    return ['vat', 'exempt'];
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row)) {
+            return $row[$key];
+        }
+    }
+    return $default;
 }
 
-function productImportMaximumUnitPrice(): float
+function productImportRows(array $payload): array
 {
-    // products.unit_price is DECIMAL(15,2) => 13 integer digits + 2 decimal places.
-    return 9999999999999.99;
-}
-
-function productImportMaximumStockValue(): float
-{
-    // products.stock_quantity/reorder_level are DECIMAL(10,2).
-    return 99999999.99;
-}
-
-function productImportString(mixed $value): string
-{
-    if ($value === null) {
-        return '';
+    if (isset($payload['preview']) && is_array($payload['preview'])) {
+        $nested = productImportRows($payload['preview']);
+        if ($nested) return $nested;
     }
 
-    if (is_bool($value)) {
-        return $value ? '1' : '0';
-    }
-
-    if (is_array($value) || is_object($value) || is_resource($value)) {
-        return '';
-    }
-
-    return trim((string) $value);
-}
-
-function productImportKey(mixed $value): string
-{
-    $value = productImportString($value);
-    return function_exists('mb_strtolower')
-        ? mb_strtolower($value, 'UTF-8')
-        : strtolower($value);
-}
-
-function productImportNumber(mixed $value): ?float
-{
-    if (is_int($value) || is_float($value)) {
-        return is_finite((float) $value) ? (float) $value : null;
-    }
-
-    $raw = productImportString($value);
-    if ($raw === '') {
-        return null;
-    }
-
-    // Friendly handling for values copied from formatted spreadsheets.
-    $normalised = str_replace([',', '₦', ' '], '', $raw);
-    if (str_ends_with($normalised, '%')) {
-        $normalised = substr($normalised, 0, -1);
-    }
-
-    if ($normalised === '' || !is_numeric($normalised)) {
-        return null;
-    }
-
-    return (float) $normalised;
-}
-
-function productImportBoolean(mixed $value, bool $default = true): ?bool
-{
-    if ($value === null || productImportString($value) === '') {
-        return $default;
-    }
-
-    if (is_bool($value)) {
-        return $value;
-    }
-
-    if (is_int($value) || is_float($value)) {
-        if ((float) $value === 1.0) return true;
-        if ((float) $value === 0.0) return false;
-        return null;
-    }
-
-    $normalised = strtolower(productImportString($value));
-    if (in_array($normalised, ['1', 'true', 'yes', 'y', 'active'], true)) {
-        return true;
-    }
-    if (in_array($normalised, ['0', 'false', 'no', 'n', 'inactive'], true)) {
-        return false;
-    }
-
-    return null;
-}
-
-function productImportAddError(array &$errors, string $field, string $message): void
-{
-    $errors[] = [
-        'field' => $field,
-        'message' => $message,
-    ];
-}
-
-function productImportCategoryMaps(mysqli $conn): array
-{
-    $result = $conn->query("SELECT id, name, description FROM product_categories ORDER BY name ASC");
-    if (!$result) {
-        throw new Exception('Failed to load product categories.', 500);
-    }
-
-    $byId = [];
-    $byName = [];
-    $categories = [];
-
-    while ($row = $result->fetch_assoc()) {
-        $category = [
-            'id' => (int) $row['id'],
-            'name' => (string) $row['name'],
-            'description' => $row['description'] !== null ? (string) $row['description'] : '',
-            'is_new' => false,
-        ];
-        $byId[$category['id']] = $category;
-        $byName[productImportKey($category['name'])] = $category;
-        $categories[] = $category;
-    }
-
-    return [
-        'by_id' => $byId,
-        'by_name' => $byName,
-        'categories' => $categories,
-    ];
-}
-
-function productImportExistingSkuMap(mysqli $conn, array $skus): array
-{
-    $uniqueSkus = [];
-    foreach ($skus as $sku) {
-        $sku = trim((string) $sku);
-        if ($sku !== '') {
-            $uniqueSkus[strtolower($sku)] = $sku;
+    foreach (['rows', 'products', 'items', 'product_rows', 'productRows'] as $key) {
+        if (isset($payload[$key]) && is_array($payload[$key])) {
+            return array_values(array_filter($payload[$key], 'is_array'));
         }
     }
 
-    if (!$uniqueSkus) {
+    // Some clients send the array directly.
+    if (array_is_list($payload)) {
+        return array_values(array_filter($payload, 'is_array'));
+    }
+
+    return [];
+}
+
+function productImportCategories(array $payload): array
+{
+    if (isset($payload['preview']) && is_array($payload['preview'])) {
+        $nested = productImportCategories($payload['preview']);
+        if ($nested) return $nested;
+    }
+
+    foreach (['categories', 'workbook_categories', 'category_rows', 'categoryRows', 'new_categories', 'newCategories'] as $key) {
+        if (isset($payload[$key]) && is_array($payload[$key])) {
+            return array_values(array_filter($payload[$key], 'is_array'));
+        }
+    }
+    return [];
+}
+
+function productImportBoolean(mixed $value): bool
+{
+    if (is_bool($value)) return $value;
+    if (is_int($value) || is_float($value)) return (float) $value !== 0.0;
+    $normalized = strtolower(trim((string) ($value ?? '')));
+    return in_array($normalized, ['1', 'true', 'yes', 'y', 'on', 'new'], true);
+}
+
+/**
+ * Reconstruct workbook category intent from already-previewed product rows.
+ *
+ * The frontend's Validate Changes flow can send the normalized product rows
+ * without resending the original Categories sheet. New categories are therefore
+ * carried on each preview row via category_will_create / a temporary negative
+ * category_id. Rebuilding a unique category list here keeps revalidation
+ * identical to the initial workbook preview.
+ */
+function productImportCategoriesFromRows(array $rows): array
+{
+    $categories = [];
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) continue;
+
+        $name = productImportString($row, ['category_name', 'category', 'Category', 'Category Name']);
+        if ($name === '') continue;
+
+        $idRaw = productImportValue($row, ['category_id', 'Category ID', 'categoryId']);
+        $temporaryId = is_numeric($idRaw) ? (int) $idRaw : null;
+        $willCreate = productImportBoolean(productImportValue(
+            $row,
+            ['category_will_create', 'categoryWillCreate', 'will_create', 'willCreate'],
+            false
+        ));
+
+        if (!$willCreate && ($temporaryId === null || $temporaryId >= 0)) {
+            continue;
+        }
+
+        $key = productImportLower($name);
+        if (isset($categories[$key])) continue;
+
+        $description = productImportString(
+            $row,
+            ['category_description', 'categoryDescription', 'Category Description'],
+            ''
+        );
+
+        $categories[$key] = [
+            'id' => $temporaryId !== null && $temporaryId < 0 ? $temporaryId : null,
+            'category_id' => $temporaryId !== null && $temporaryId < 0 ? $temporaryId : null,
+            'temporary_id' => $temporaryId !== null && $temporaryId < 0 ? $temporaryId : null,
+            'name' => $name,
+            'category_name' => $name,
+            'description' => $description !== '' ? $description : null,
+            'will_create' => true,
+        ];
+    }
+
+    return array_values($categories);
+}
+
+function productImportLower(string $value): string
+{
+    return function_exists('mb_strtolower')
+        ? mb_strtolower(trim($value), 'UTF-8')
+        : strtolower(trim($value));
+}
+
+function productImportStatus(mixed $value, float $stockQuantity): array
+{
+    $raw = trim((string) ($value ?? ''));
+    $lower = strtolower($raw);
+
+    // Excel formulas are occasionally passed through literally by SheetJS when
+    // a workbook was generated without a cached formula value. Evaluate the
+    // template's intended status instead of rejecting an otherwise valid row.
+    if ($raw === '' || str_starts_with($raw, '=')) {
+        return [$stockQuantity > 1 ? 1 : 0, $stockQuantity > 1 ? 'active' : 'inactive'];
+    }
+
+    if (in_array($lower, ['active', '1', 'yes', 'true', 'enabled'], true)) {
+        return [1, 'active'];
+    }
+    if (in_array($lower, ['inactive', '0', 'no', 'false', 'disabled'], true)) {
+        return [0, 'inactive'];
+    }
+
+    return [-1, $raw];
+}
+
+function productImportNormalizeTaxType(string $value): string
+{
+    $lower = strtolower(trim($value));
+    if ($lower === '' || in_array($lower, ['vat', 'vat 7.5%', '7.5% vat', 'taxable'], true)) {
+        return 'vat';
+    }
+    if (in_array($lower, ['exempt', 'vat exempt', 'non-vat', 'non vat', 'none'], true)) {
+        return 'exempt';
+    }
+    return $lower;
+}
+
+function productImportNormalizeUnit(string $value): string
+{
+    $lower = strtolower(trim($value));
+    $map = [
+        'unit' => 'single',
+        'single unit' => 'single',
+        'piece' => 'single',
+        'pieces' => 'single',
+        'pc' => 'single',
+        'pcs' => 'single',
+        'single' => 'single',
+        'set' => 'set',
+        'sets' => 'set',
+        'carton' => 'carton',
+        'cartons' => 'carton',
+        'ctn' => 'carton',
+        'dozen' => 'dozen',
+        'dozens' => 'dozen',
+        'doz' => 'dozen',
+    ];
+    return $map[$lower] ?? $lower;
+}
+
+function productImportExistingCategories(mysqli $conn): array
+{
+    $result = $conn->query('SELECT id, name, description FROM product_categories ORDER BY name ASC');
+    $byId = [];
+    $byName = [];
+    while ($row = $result->fetch_assoc()) {
+        $item = [
+            'id' => (int) $row['id'],
+            'name' => (string) $row['name'],
+            'description' => $row['description'],
+        ];
+        $byId[(int) $row['id']] = $item;
+        $byName[productImportLower((string) $row['name'])] = $item;
+    }
+    return [$byId, $byName];
+}
+
+function productImportExistingSkus(mysqli $conn, array $skus): array
+{
+    $skus = array_values(array_unique(array_filter(array_map('trim', $skus))));
+    if (!$skus) {
         return [];
     }
 
-    $values = array_values($uniqueSkus);
-    $placeholders = implode(',', array_fill(0, count($values), '?'));
-    $types = str_repeat('s', count($values));
-
-    $stmt = $conn->prepare("SELECT id, sku FROM products WHERE sku IN ($placeholders)");
-    if (!$stmt) {
-        throw new Exception('Failed to validate existing product SKUs.', 500);
-    }
-
-    $stmt->bind_param($types, ...$values);
+    $placeholders = implode(',', array_fill(0, count($skus), '?'));
+    $stmt = $conn->prepare("SELECT id, sku FROM products WHERE sku IN ({$placeholders})");
+    $types = str_repeat('s', count($skus));
+    $stmt->bind_param($types, ...$skus);
     $stmt->execute();
     $result = $stmt->get_result();
-
-    $existing = [];
+    $found = [];
     while ($row = $result->fetch_assoc()) {
-        $existing[strtolower((string) $row['sku'])] = [
-            'id' => (int) $row['id'],
-            'sku' => (string) $row['sku'],
-        ];
+        $found[strtoupper(trim((string) $row['sku']))] = (int) $row['id'];
     }
     $stmt->close();
-
-    return $existing;
+    return $found;
 }
 
-/**
- * Validate the Categories sheet.
- *
- * Existing template rows are accepted when their Category ID and name still
- * match the database. A row with a blank Category ID becomes a proposed new
- * category, unless that category already exists in the database (for example
- * if another user created it after the workbook was downloaded), in which
- * case it is safely matched to the existing record instead of being duplicated.
- */
-function validateProductImportCategories(
-    mysqli $conn,
-    array $categoryRows,
-    ?array $categoryMaps = null,
-    int $maxRows = 5000
-): array {
-    $categoryRows = array_values($categoryRows);
+function productImportNormalizeCategories(mysqli $conn, array $rawCategories): array
+{
+    [$existingById, $existingByName] = productImportExistingCategories($conn);
+    $items = [];
+    $newByName = [];
+    $seenWorkbookNames = [];
+    $nextTemporaryCategoryId = -1;
 
-    if (count($categoryRows) > $maxRows) {
-        throw new Exception("A maximum of {$maxRows} category rows can be included in an import workbook.", 422);
-    }
-
-    $categoryMaps = $categoryMaps ?? productImportCategoryMaps($conn);
-
-    $nameCounts = [];
-    foreach ($categoryRows as $row) {
-        if (!is_array($row)) continue;
-        $name = productImportString($row['name'] ?? ($row['category_name'] ?? ''));
-        if ($name === '') continue;
-        $key = productImportKey($name);
-        $nameCounts[$key] = ($nameCounts[$key] ?? 0) + 1;
-    }
-
-    $normalisedRows = [];
-    $validCount = 0;
-    $invalidCount = 0;
-    $newCount = 0;
-    $existingCount = 0;
-    $validNewByName = [];
-    $rowByName = [];
-
-    foreach ($categoryRows as $index => $row) {
-        $rowNumber = $index + 2;
+    foreach ($rawCategories as $index => $raw) {
+        $idRaw = productImportValue($raw, ['id', 'category_id', 'Category ID', 'Category Id']);
+        $name = productImportString($raw, ['name', 'category_name', 'Category Name', 'category']);
+        $description = productImportString($raw, ['description', 'Description', 'Description (Optional)']);
         $errors = [];
+        $status = 'existing';
+        $resolvedId = null;
 
-        if (!is_array($row)) {
-            $normalisedRows[] = [
-                'row_number' => $rowNumber,
-                'valid' => false,
-                'is_new' => false,
-                'matched_existing' => false,
-                'errors' => [[
-                    'field' => 'row',
-                    'message' => 'This category row could not be read.',
-                ]],
-                'data' => null,
-            ];
-            $invalidCount++;
-            continue;
-        }
-
-        if (isset($row['row_number']) && is_numeric($row['row_number'])) {
-            $rowNumber = max(2, (int) $row['row_number']);
-        }
-
-        $categoryIdRaw = productImportString($row['category_id'] ?? '');
-        $name = productImportString($row['name'] ?? ($row['category_name'] ?? ''));
-        $description = productImportString($row['description'] ?? '');
-
-        // Ignore fully blank rows if a client sends them despite spreadsheet cleanup.
-        if ($categoryIdRaw === '' && $name === '' && $description === '') {
+        if ($name === '' && ($idRaw === null || $idRaw === '')) {
             continue;
         }
 
         if ($name === '') {
-            productImportAddError($errors, 'name', 'Category name is required.');
-        } elseif (strlen($name) > 100) {
-            productImportAddError($errors, 'name', 'Category name cannot exceed 100 characters.');
+            $errors[] = 'Category name is required.';
+        }
+        if (strlen($name) > 100) {
+            $errors[] = 'Category name cannot exceed 100 characters.';
         }
 
-        $nameKey = productImportKey($name);
-        if ($nameKey !== '' && ($nameCounts[$nameKey] ?? 0) > 1) {
-            productImportAddError($errors, 'name', 'This category appears more than once in the Categories sheet.');
-        }
+        if ($name !== '') {
+            $nameKey = productImportLower($name);
 
-        $resolvedCategory = null;
-        $isNew = false;
-        $matchedExisting = false;
+            // Category names are the portable identity for workbook imports.
+            // IDs can be stale when a template is prepared against another or
+            // freshly-reset database, so resolve by name first whenever possible.
+            if (isset($existingByName[$nameKey])) {
+                $resolvedId = (int) $existingByName[$nameKey]['id'];
+                $name = $existingByName[$nameKey]['name'];
+                $status = 'existing';
+            } elseif ($idRaw !== null && $idRaw !== '' && is_numeric($idRaw)) {
+                $candidateId = (int) $idRaw;
 
-        if ($categoryIdRaw !== '') {
-            if (!ctype_digit($categoryIdRaw) || (int) $categoryIdRaw <= 0) {
-                productImportAddError($errors, 'category_id', 'Category ID must be a valid positive number or left blank for a new category.');
-            } else {
-                $categoryId = (int) $categoryIdRaw;
-                $resolvedCategory = $categoryMaps['by_id'][$categoryId] ?? null;
-                if (!$resolvedCategory) {
-                    productImportAddError($errors, 'category_id', 'This Category ID no longer exists. Download a fresh template or leave the ID blank for a new category.');
-                } elseif ($name !== '' && productImportKey($resolvedCategory['name']) !== $nameKey) {
-                    productImportAddError($errors, 'name', 'Category ID and category name do not match. Existing category rows should not be renamed in the workbook.');
-                }
-            }
-        } elseif ($name !== '') {
-            $resolvedCategory = $categoryMaps['by_name'][$nameKey] ?? null;
-            if ($resolvedCategory) {
-                // Safe race/stale-template behaviour: do not create a duplicate if
-                // the same category was created after this workbook was downloaded.
-                $matchedExisting = true;
-            } else {
-                $isNew = true;
-            }
-        }
-
-        $isValid = count($errors) === 0;
-        if ($isValid) {
-            $validCount++;
-            if ($isNew) {
-                $newCount++;
-            } else {
-                $existingCount++;
-            }
-        } else {
-            $invalidCount++;
-        }
-
-        $data = [
-            'row_number' => $rowNumber,
-            'category_id' => $resolvedCategory['id'] ?? null,
-            'name' => $resolvedCategory['name'] ?? $name,
-            'description' => $isNew ? $description : ($resolvedCategory['description'] ?? $description),
-        ];
-
-        $normalised = [
-            'row_number' => $rowNumber,
-            'valid' => $isValid,
-            'is_new' => $isNew,
-            'matched_existing' => $matchedExisting,
-            'errors' => $errors,
-            'data' => $data,
-        ];
-        $normalisedRows[] = $normalised;
-
-        if ($nameKey !== '') {
-            $rowByName[$nameKey] = $normalised;
-        }
-
-        if ($isValid && $isNew && $nameKey !== '') {
-            $validNewByName[$nameKey] = [
-                'id' => null,
-                'name' => $name,
-                'description' => $description,
-                'is_new' => true,
-            ];
-        }
-    }
-
-    return [
-        'rows' => $normalisedRows,
-        'summary' => [
-            'total' => count($normalisedRows),
-            'valid' => $validCount,
-            'invalid' => $invalidCount,
-            'new' => $newCount,
-            'existing' => $existingCount,
-            'can_create' => $invalidCount === 0,
-        ],
-        'valid_new_by_name' => $validNewByName,
-        'row_by_name' => $rowByName,
-    ];
-}
-
-/**
- * Validate and normalise import rows plus any category rows parsed from the
- * workbook's Categories sheet.
- *
- * Accepted product keys:
- * category_id OR category/category_name, name, sku, description, unit_price,
- * unit_of_measure, tax_type, tax_rate, stock_quantity, reorder_level, is_active.
- */
-function validateProductImportRows(
-    mysqli $conn,
-    array $rows,
-    array $categoryRows = [],
-    int $maxRows = 1000
-): array {
-    $rows = array_values($rows);
-
-    if (!$rows) {
-        throw new Exception('No product rows were provided for import.', 422);
-    }
-
-    if (count($rows) > $maxRows) {
-        throw new Exception("A maximum of {$maxRows} products can be imported at once.", 422);
-    }
-
-    $categoryMaps = productImportCategoryMaps($conn);
-    $categoryValidation = validateProductImportCategories($conn, $categoryRows, $categoryMaps);
-
-    $skuCounts = [];
-    $candidateSkus = [];
-    foreach ($rows as $row) {
-        if (!is_array($row)) continue;
-        $sku = productImportString($row['sku'] ?? '');
-        if ($sku === '') continue;
-        $key = strtolower($sku);
-        $skuCounts[$key] = ($skuCounts[$key] ?? 0) + 1;
-        $candidateSkus[] = $sku;
-    }
-
-    $existingSkus = productImportExistingSkuMap($conn, $candidateSkus);
-
-    $normalisedRows = [];
-    $validCount = 0;
-    $invalidCount = 0;
-
-    foreach ($rows as $index => $row) {
-        $rowNumber = $index + 2; // Header is row 1 in the spreadsheet template.
-        $errors = [];
-
-        if (!is_array($row)) {
-            $normalisedRows[] = [
-                'row_number' => $rowNumber,
-                'valid' => false,
-                'errors' => [[
-                    'field' => 'row',
-                    'message' => 'This row could not be read.',
-                ]],
-                'data' => null,
-            ];
-            $invalidCount++;
-            continue;
-        }
-
-        if (isset($row['row_number']) && is_numeric($row['row_number'])) {
-            $rowNumber = max(2, (int) $row['row_number']);
-        }
-
-        $name = productImportString($row['name'] ?? '');
-        $sku = strtoupper(productImportString($row['sku'] ?? ''));
-        $description = productImportString($row['description'] ?? '');
-
-        if ($name === '') {
-            productImportAddError($errors, 'name', 'Product name is required.');
-        } elseif (strlen($name) > 200) {
-            productImportAddError($errors, 'name', 'Product name cannot exceed 200 characters.');
-        }
-
-        if ($sku === '') {
-            productImportAddError($errors, 'sku', 'SKU is required.');
-        } elseif (strlen($sku) > 100) {
-            productImportAddError($errors, 'sku', 'SKU cannot exceed 100 characters.');
-        } else {
-            $skuKey = strtolower($sku);
-            if (($skuCounts[$skuKey] ?? 0) > 1) {
-                productImportAddError($errors, 'sku', 'This SKU appears more than once in the import file.');
-            }
-            if (isset($existingSkus[$skuKey])) {
-                productImportAddError($errors, 'sku', 'A product with this SKU already exists.');
-            }
-        }
-
-        // Resolve category using an existing ID first, then an existing name,
-        // then a valid new category proposed on the Categories sheet.
-        $categoryIdRaw = $row['category_id'] ?? null;
-        $categoryNameRaw = productImportString($row['category_name'] ?? ($row['category'] ?? ''));
-        $resolvedCategory = null;
-        $categoryIsNew = false;
-
-        if ($categoryIdRaw !== null && productImportString($categoryIdRaw) !== '') {
-            if (!is_numeric($categoryIdRaw) || (int) $categoryIdRaw <= 0) {
-                productImportAddError($errors, 'category_id', 'Category must be a valid category.');
-            } else {
-                $categoryId = (int) $categoryIdRaw;
-                $resolvedCategory = $categoryMaps['by_id'][$categoryId] ?? null;
-                if (!$resolvedCategory) {
-                    productImportAddError($errors, 'category_id', 'Selected category does not exist.');
-                } elseif ($categoryNameRaw !== '' && productImportKey($resolvedCategory['name']) !== productImportKey($categoryNameRaw)) {
-                    productImportAddError($errors, 'category_id', 'Category ID and category name do not match.');
-                }
-            }
-        } elseif ($categoryNameRaw !== '') {
-            $categoryNameKey = productImportKey($categoryNameRaw);
-            $resolvedCategory = $categoryMaps['by_name'][$categoryNameKey] ?? null;
-
-            if (!$resolvedCategory) {
-                $newCategory = $categoryValidation['valid_new_by_name'][$categoryNameKey] ?? null;
-                if ($newCategory) {
-                    $resolvedCategory = $newCategory;
-                    $categoryIsNew = true;
+                if (isset($existingById[$candidateId])
+                    && productImportLower((string) $existingById[$candidateId]['name']) === $nameKey) {
+                    $resolvedId = $candidateId;
+                    $name = $existingById[$candidateId]['name'];
+                    $status = 'existing';
                 } else {
-                    $categorySheetRow = $categoryValidation['row_by_name'][$categoryNameKey] ?? null;
-                    if ($categorySheetRow && !$categorySheetRow['valid']) {
-                        productImportAddError($errors, 'category_id', "Category '{$categoryNameRaw}' has an error on the Categories sheet.");
+                    // The ID is not valid for this database (or points to a
+                    // different category), but the workbook category name is
+                    // genuinely new. Treat it as a category to create instead
+                    // of rejecting all products that reference it.
+                    $status = 'new';
+                    if (isset($seenWorkbookNames[$nameKey])) {
+                        $errors[] = 'This new category is duplicated in the Categories sheet.';
+                        $status = 'invalid';
                     } else {
-                        productImportAddError($errors, 'category_id', "Category '{$categoryNameRaw}' does not exist. Add it to the Categories sheet with a blank Category ID, or use an existing category.");
+                        $seenWorkbookNames[$nameKey] = true;
+                        $temporaryId = $nextTemporaryCategoryId--;
+                        $resolvedId = $temporaryId;
+                        $newByName[$nameKey] = [
+                            'id' => $temporaryId,
+                            'category_id' => $temporaryId,
+                            'temporary_id' => $temporaryId,
+                            'name' => $name,
+                            'category_name' => $name,
+                            'description' => $description !== '' ? $description : null,
+                        ];
                     }
                 }
+            } else {
+                $status = 'new';
+                if (isset($seenWorkbookNames[$nameKey])) {
+                    $errors[] = 'This new category is duplicated in the Categories sheet.';
+                    $status = 'invalid';
+                } else {
+                    $seenWorkbookNames[$nameKey] = true;
+                    $temporaryId = $nextTemporaryCategoryId--;
+                    $resolvedId = $temporaryId;
+                    $newByName[$nameKey] = [
+                        'id' => $temporaryId,
+                        'category_id' => $temporaryId,
+                        'temporary_id' => $temporaryId,
+                        'name' => $name,
+                        'category_name' => $name,
+                        'description' => $description !== '' ? $description : null,
+                    ];
+                }
+            }
+        } elseif ($idRaw !== null && $idRaw !== '' && is_numeric($idRaw)) {
+            $candidateId = (int) $idRaw;
+            if (!isset($existingById[$candidateId])) {
+                $errors[] = "Category ID {$candidateId} does not exist and no category name was supplied.";
+                $status = 'invalid';
+            } else {
+                $resolvedId = $candidateId;
+                $name = $existingById[$candidateId]['name'];
+                $status = 'existing';
+            }
+        }
+
+        $items[] = [
+            'row_number' => (int) (productImportValue($raw, ['row_number', '_row_number'], $index + 2)),
+            'id' => $resolvedId,
+            'category_id' => $resolvedId,
+            'temporary_id' => ($status === 'new' && $resolvedId !== null) ? $resolvedId : null,
+            'name' => $name,
+            'category_name' => $name,
+            'description' => $description !== '' ? $description : null,
+            'status' => $errors ? 'invalid' : $status,
+            'will_create' => !$errors && $status === 'new',
+            'is_valid' => !$errors,
+            'valid' => !$errors,
+            'errors' => $errors,
+        ];
+    }
+
+    return [$items, $newByName, $existingById, $existingByName];
+}
+
+function productImportBuildPreview(mysqli $conn, array $payload): array
+{
+    $rawRows = productImportRows($payload);
+    $rawCategories = productImportCategories($payload);
+
+    // Validate Changes may submit only the normalized product rows. Preserve
+    // new-category intent from the initial preview so revalidation does not
+    // suddenly turn valid products into "category does not exist" errors.
+    $rowCategories = productImportCategoriesFromRows($rawRows);
+    if ($rowCategories) {
+        $categoryNames = [];
+        foreach ($rawCategories as $category) {
+            if (!is_array($category)) continue;
+            $categoryName = productImportString($category, ['name', 'category_name', 'Category Name', 'category']);
+            if ($categoryName !== '') {
+                $categoryNames[productImportLower($categoryName)] = true;
+            }
+        }
+        foreach ($rowCategories as $category) {
+            $categoryName = productImportString($category, ['name', 'category_name']);
+            $key = productImportLower($categoryName);
+            if ($categoryName !== '' && !isset($categoryNames[$key])) {
+                $rawCategories[] = $category;
+                $categoryNames[$key] = true;
+            }
+        }
+    }
+
+    if (count($rawRows) > 1000) {
+        throw new RuntimeException('A maximum of 1,000 products can be imported at once.', 422);
+    }
+
+    [$categoryItems, $newCategoriesByName, $existingById, $existingByName] = productImportNormalizeCategories($conn, $rawCategories);
+
+    // New categories can also be referenced directly from Products even if the
+    // Categories sheet is supplied by an older template. They remain invalid
+    // unless explicitly present as a new category in the Categories sheet.
+    $skus = [];
+    foreach ($rawRows as $raw) {
+        $sku = productImportString($raw, ['sku', 'SKU']);
+        if ($sku !== '') {
+            $skus[] = strtoupper($sku);
+        }
+    }
+    $existingSkuMap = productImportExistingSkus($conn, $skus);
+
+    $rows = [];
+    $seenBatchSkus = [];
+    $validCount = 0;
+    $invalidCount = 0;
+
+    foreach ($rawRows as $index => $raw) {
+        $rowNumber = (int) productImportValue($raw, ['row_number', '_row_number', 'excel_row'], $index + 2);
+        $categoryIdRaw = productImportValue($raw, ['category_id', 'Category ID', 'categoryId']);
+        $categoryName = productImportString($raw, ['category_name', 'category', 'Category', 'Category Name']);
+        $name = productImportString($raw, ['name', 'product_name', 'Product Name']);
+        $sku = strtoupper(productImportString($raw, ['sku', 'SKU']));
+        $description = productImportString($raw, ['description', 'Description']);
+        $priceRaw = productImportValue($raw, ['unit_price', 'price', 'Unit Price']);
+        $unit = productImportNormalizeUnit(productImportString($raw, ['unit_of_measure', 'unit', 'Unit of Measure', 'Unit']));
+        $taxType = productImportNormalizeTaxType(productImportString($raw, ['tax_type', 'Tax Type'], 'vat'));
+        $taxRateRaw = productImportValue($raw, ['tax_rate', 'Tax Rate (%)', 'Tax Rate'], $taxType === 'exempt' ? 0 : 7.5);
+        $stockRaw = productImportValue($raw, ['stock_quantity', 'stock_qty', 'Stock Quantity', 'Stock Qty'], 0);
+        $reorderRaw = productImportValue($raw, ['reorder_level', 'Reorder Level'], 0);
+
+        $unitPrice = is_numeric($priceRaw) ? (float) $priceRaw : NAN;
+        $taxRate = is_numeric($taxRateRaw) ? (float) $taxRateRaw : NAN;
+        $stockQuantity = is_numeric($stockRaw) ? (float) $stockRaw : NAN;
+        $reorderLevel = is_numeric($reorderRaw) ? (float) $reorderRaw : NAN;
+        [$isActive, $statusLabel] = productImportStatus(productImportValue($raw, ['status', 'Status', 'is_active']), is_nan($stockQuantity) ? 0 : $stockQuantity);
+
+        $errors = [];
+        $resolvedCategoryId = null;
+        $categoryWillCreate = false;
+
+        if ($categoryIdRaw !== null && $categoryIdRaw !== '' && is_numeric($categoryIdRaw)) {
+            $candidateId = (int) $categoryIdRaw;
+            $categoryKey = $categoryName !== '' ? productImportLower($categoryName) : '';
+
+            if ($candidateId > 0 && isset($existingById[$candidateId])) {
+                $resolvedCategoryId = $candidateId;
+                if ($categoryName === '') {
+                    $categoryName = $existingById[$candidateId]['name'];
+                }
+            } elseif ($categoryKey !== '' && isset($existingByName[$categoryKey])) {
+                // A workbook may carry an old/stale category ID. Prefer the
+                // current database category when the supplied name matches.
+                $resolvedCategoryId = (int) $existingByName[$categoryKey]['id'];
+                $categoryName = $existingByName[$categoryKey]['name'];
+            } elseif ($categoryKey !== '' && isset($newCategoriesByName[$categoryKey])) {
+                // New workbook categories use a temporary negative ID during
+                // preview so the frontend can keep the category selected and
+                // still distinguish it from an existing database category.
+                $categoryWillCreate = true;
+                $resolvedCategoryId = (int) $newCategoriesByName[$categoryKey]['temporary_id'];
+                $categoryName = $newCategoriesByName[$categoryKey]['name'];
+            } else {
+                $errors[] = "Category ID {$candidateId} does not exist.";
+            }
+        } elseif ($categoryName !== '') {
+            $categoryKey = productImportLower($categoryName);
+            if (isset($existingByName[$categoryKey])) {
+                $resolvedCategoryId = (int) $existingByName[$categoryKey]['id'];
+                $categoryName = $existingByName[$categoryKey]['name'];
+            } elseif (isset($newCategoriesByName[$categoryKey])) {
+                $categoryWillCreate = true;
+                $resolvedCategoryId = (int) $newCategoriesByName[$categoryKey]['temporary_id'];
+                $categoryName = $newCategoriesByName[$categoryKey]['name'];
+            } else {
+                $errors[] = "Category '{$categoryName}' does not exist. Add it to the Categories sheet first.";
             }
         } else {
-            productImportAddError($errors, 'category_id', 'Category is required.');
+            $errors[] = 'Category is required.';
         }
 
-        $unitPrice = productImportNumber($row['unit_price'] ?? null);
-        if ($unitPrice === null) {
-            productImportAddError($errors, 'unit_price', 'Unit price must be a valid number.');
-        } elseif ($unitPrice < 0) {
-            productImportAddError($errors, 'unit_price', 'Unit price cannot be negative.');
-        } elseif ($unitPrice > productImportMaximumUnitPrice()) {
-            productImportAddError($errors, 'unit_price', 'Unit price is too large for the product record.');
+        if ($name === '') $errors[] = 'Product name is required.';
+        if ($name !== '' && strlen($name) > 200) $errors[] = 'Product name cannot exceed 200 characters.';
+        if ($sku === '') $errors[] = 'SKU is required.';
+        if ($sku !== '' && strlen($sku) > 100) $errors[] = 'SKU cannot exceed 100 characters.';
+
+        if ($sku !== '') {
+            $skuKey = strtoupper($sku);
+            if (isset($seenBatchSkus[$skuKey])) {
+                $errors[] = "SKU '{$sku}' appears more than once in this import.";
+            } else {
+                $seenBatchSkus[$skuKey] = true;
+            }
+            if (isset($existingSkuMap[$skuKey])) {
+                $errors[] = "SKU '{$sku}' already exists in the database.";
+            }
         }
 
-        $unitOfMeasure = strtolower(productImportString($row['unit_of_measure'] ?? ''));
-        if ($unitOfMeasure === '') {
-            productImportAddError($errors, 'unit_of_measure', 'Unit of measure is required.');
-        } elseif (!in_array($unitOfMeasure, productImportAllowedUnits(), true)) {
-            productImportAddError($errors, 'unit_of_measure', 'Unit of measure must be single, set, carton, or dozen.');
+        if (is_nan($unitPrice) || $unitPrice < 0) $errors[] = 'Unit price must be a valid non-negative number.';
+        if (!is_nan($unitPrice) && $unitPrice > 9999999999999.99) $errors[] = 'Unit price exceeds the supported database limit.';
+        if (!in_array($unit, ['single', 'set', 'carton', 'dozen'], true)) $errors[] = "Unit of measure '{$unit}' is invalid.";
+        if (!in_array($taxType, ['vat', 'exempt'], true)) $errors[] = "Tax type '{$taxType}' is invalid.";
+        if (is_nan($taxRate) || $taxRate < 0 || $taxRate > 100) $errors[] = 'Tax rate must be between 0 and 100.';
+        if ($taxType === 'exempt') $taxRate = 0.0;
+        if (is_nan($stockQuantity) || $stockQuantity < 0 || $stockQuantity > 99999999.99) $errors[] = 'Stock quantity must be between 0 and 99,999,999.99.';
+        if (is_nan($reorderLevel) || $reorderLevel < 0 || $reorderLevel > 99999999.99) $errors[] = 'Reorder level must be between 0 and 99,999,999.99.';
+        if ($isActive === -1) $errors[] = "Status '{$statusLabel}' is invalid. Use Active or Inactive.";
+
+        $valid = count($errors) === 0;
+        $valid ? $validCount++ : $invalidCount++;
+
+        $categoryDescription = null;
+        if ($categoryName !== '') {
+            $categoryKeyForDescription = productImportLower($categoryName);
+            if ($categoryWillCreate && isset($newCategoriesByName[$categoryKeyForDescription])) {
+                $categoryDescription = $newCategoriesByName[$categoryKeyForDescription]['description'] ?? null;
+            } elseif (isset($existingByName[$categoryKeyForDescription])) {
+                $categoryDescription = $existingByName[$categoryKeyForDescription]['description'] ?? null;
+            }
         }
 
-        $taxType = strtolower(productImportString($row['tax_type'] ?? 'vat'));
-        if (!in_array($taxType, productImportAllowedTaxTypes(), true)) {
-            productImportAddError($errors, 'tax_type', 'Tax type must be vat or exempt.');
-        }
-
-        $taxRate = productImportNumber($row['tax_rate'] ?? ($taxType === 'exempt' ? 0 : 7.5));
-        if ($taxRate === null || $taxRate < 0 || $taxRate > 100) {
-            productImportAddError($errors, 'tax_rate', 'Tax rate must be a number between 0 and 100.');
-        }
-        if ($taxType === 'exempt') {
-            $taxRate = 0.0;
-        }
-
-        $stockQuantity = productImportNumber($row['stock_quantity'] ?? 0);
-        if ($stockQuantity === null || $stockQuantity < 0) {
-            productImportAddError($errors, 'stock_quantity', 'Stock quantity must be zero or greater.');
-        } elseif ($stockQuantity > productImportMaximumStockValue()) {
-            productImportAddError($errors, 'stock_quantity', 'Stock quantity is too large for the product record.');
-        }
-
-        $reorderLevel = productImportNumber($row['reorder_level'] ?? 0);
-        if ($reorderLevel === null || $reorderLevel < 0) {
-            productImportAddError($errors, 'reorder_level', 'Reorder level must be zero or greater.');
-        } elseif ($reorderLevel > productImportMaximumStockValue()) {
-            productImportAddError($errors, 'reorder_level', 'Reorder level is too large for the product record.');
-        }
-
-        $isActive = productImportBoolean($row['is_active'] ?? ($row['status'] ?? null), true);
-        if ($isActive === null) {
-            productImportAddError($errors, 'is_active', 'Status must be Active or Inactive.');
-        }
-
-        $data = [
+        $row = [
             'row_number' => $rowNumber,
-            'category_id' => $resolvedCategory['id'] ?? null,
-            'category_name' => $resolvedCategory['name'] ?? $categoryNameRaw,
-            'category_is_new' => $categoryIsNew,
+            'category_id' => $resolvedCategoryId,
+            'category_name' => $categoryName,
+            'category' => $categoryName,
+            'category_description' => $categoryDescription,
+            'category_will_create' => $categoryWillCreate,
             'name' => $name,
+            'product_name' => $name,
             'sku' => $sku,
-            'description' => $description,
-            'unit_price' => $unitPrice ?? 0.0,
-            'unit_of_measure' => $unitOfMeasure,
-            'tax_type' => in_array($taxType, productImportAllowedTaxTypes(), true) ? $taxType : 'vat',
-            'tax_rate' => $taxRate ?? 0.0,
-            'stock_quantity' => $stockQuantity ?? 0.0,
-            'reorder_level' => $reorderLevel ?? 0.0,
-            'is_active' => $isActive === null ? 1 : ($isActive ? 1 : 0),
-        ];
-
-        $isValid = count($errors) === 0;
-        if ($isValid) {
-            $validCount++;
-        } else {
-            $invalidCount++;
-        }
-
-        $normalisedRows[] = [
-            'row_number' => $rowNumber,
-            'valid' => $isValid,
+            'description' => $description !== '' ? $description : null,
+            'unit_price' => is_nan($unitPrice) ? $priceRaw : $unitPrice,
+            'unit_of_measure' => $unit,
+            'unit' => $unit,
+            'tax_type' => $taxType,
+            'tax_rate' => is_nan($taxRate) ? $taxRateRaw : $taxRate,
+            'stock_quantity' => is_nan($stockQuantity) ? $stockRaw : $stockQuantity,
+            'stock_qty' => is_nan($stockQuantity) ? $stockRaw : $stockQuantity,
+            'reorder_level' => is_nan($reorderLevel) ? $reorderRaw : $reorderLevel,
+            'is_active' => $isActive === -1 ? null : $isActive,
+            'status' => $isActive === -1 ? $statusLabel : ($isActive ? 'active' : 'inactive'),
+            'is_valid' => $valid,
+            'valid' => $valid,
+            'validation_status' => $valid ? 'valid' : 'invalid',
             'errors' => $errors,
-            'data' => $data,
+            'validation_errors' => $errors,
+        ];
+        $rows[] = $row;
+    }
+
+    $invalidCategories = array_values(array_filter($categoryItems, static fn(array $item): bool => !$item['is_valid']));
+    $newCategories = array_values(array_filter($categoryItems, static fn(array $item): bool => $item['will_create']));
+    $canImport = count($rows) > 0 && $invalidCount === 0 && count($invalidCategories) === 0;
+
+    $summary = [
+        'total' => count($rows),
+        'total_rows' => count($rows),
+        'valid' => $validCount,
+        'valid_count' => $validCount,
+        'invalid' => $invalidCount,
+        'invalid_count' => $invalidCount,
+        'invalid_categories' => count($invalidCategories),
+        'new_categories' => count($newCategories),
+        'new_category_count' => count($newCategories),
+        'can_import' => $canImport,
+        'canImport' => $canImport,
+    ];
+
+    // Keep the preview contract explicit for the React import screen.  The
+    // importer previously returned a flatter payload than the frontend
+    // expected, which left category selects empty and the Import button
+    // disabled even when every row was valid.
+    $categoryOptionsByName = [];
+    foreach ($existingByName as $key => $category) {
+        $categoryOptionsByName[$key] = [
+            'id' => (int) $category['id'],
+            'category_id' => (int) $category['id'],
+            'name' => (string) $category['name'],
+            'is_new' => false,
+            'will_create' => false,
         ];
     }
-
-    $categoryOptions = $categoryMaps['categories'];
-    foreach ($categoryValidation['valid_new_by_name'] as $newCategory) {
-        $categoryOptions[] = $newCategory;
+    foreach ($newCategories as $category) {
+        $name = (string) ($category['name'] ?? $category['category_name'] ?? '');
+        if ($name === '') continue;
+        $key = productImportLower($name);
+        $categoryOptionsByName[$key] = [
+            'id' => $category['category_id'] ?? $category['temporary_id'] ?? null,
+            'category_id' => $category['category_id'] ?? $category['temporary_id'] ?? null,
+            'name' => $name,
+            'is_new' => true,
+            'will_create' => true,
+        ];
     }
+    $categoryOptions = array_values($categoryOptionsByName);
+    usort($categoryOptions, static fn(array $a, array $b): int => strcasecmp((string) $a['name'], (string) $b['name']));
 
-    $categoryInvalidCount = (int) $categoryValidation['summary']['invalid'];
-    $publicCategoryValidation = $categoryValidation;
-    unset($publicCategoryValidation['valid_new_by_name'], $publicCategoryValidation['row_by_name']);
-
-    return [
-        'rows' => $normalisedRows,
-        'categories' => $publicCategoryValidation,
-        'summary' => [
-            'total' => count($normalisedRows),
-            'valid' => $validCount,
-            'invalid' => $invalidCount,
-            'new_categories' => (int) $categoryValidation['summary']['new'],
-            'invalid_categories' => $categoryInvalidCount,
-            'can_import' => $invalidCount === 0 && $categoryInvalidCount === 0 && $validCount > 0,
-        ],
-        'options' => [
-            'categories' => $categoryOptions,
-            'unit_of_measure' => productImportAllowedUnits(),
-            'tax_type' => productImportAllowedTaxTypes(),
-        ],
+    $preview = [
+        'rows' => $rows,
+        'products' => $rows,
+        'categories' => $categoryItems,
+        'category_rows' => $categoryItems,
+        'new_categories' => $newCategories,
+        'newCategories' => $newCategories,
+        'options' => ['categories' => $categoryOptions],
+        'summary' => $summary,
+        'can_import' => $canImport,
+        'canImport' => $canImport,
     ];
+
+    return $preview + ['preview' => $preview];
 }
