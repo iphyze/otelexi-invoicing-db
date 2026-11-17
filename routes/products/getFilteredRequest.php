@@ -36,7 +36,7 @@ try {
     $unitOfMeasure = isset($_GET['unit_of_measure']) ? strtolower(trim($_GET['unit_of_measure'])) : null;
 
     // Pagination setup
-    $limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 20;
+    $limit = isset($_GET['limit']) ? min(500, max(1, (int)$_GET['limit'])) : 20;
     $page  = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
     $offset = ($page - 1) * $limit;
 
@@ -61,11 +61,13 @@ try {
     $params = [];
     $types  = "";
 
-    // Filter by status (default to active)
+    // Filter by status. Empty/all returns both active and inactive products.
     if ($status === 'inactive') {
         $baseQuery .= " AND p.is_active = 0";
-    } else {
+    } elseif ($status === 'active') {
         $baseQuery .= " AND p.is_active = 1";
+    } else {
+        $status = '';
     }
 
     // Filter by category
