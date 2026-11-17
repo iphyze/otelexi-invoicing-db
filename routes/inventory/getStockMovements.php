@@ -29,7 +29,7 @@ try {
     $dateFrom = trim((string) ($_GET['from'] ?? ''));
     $dateTo = trim((string) ($_GET['to'] ?? ''));
     $page = max(1, (int) ($_GET['page'] ?? 1));
-    $limit = min(100, max(10, (int) ($_GET['limit'] ?? 20)));
+    $limit = min(500, max(10, (int) ($_GET['limit'] ?? 20)));
     $offset = ($page - 1) * $limit;
 
     $allowedTypes = ['in', 'out', 'adjustment'];

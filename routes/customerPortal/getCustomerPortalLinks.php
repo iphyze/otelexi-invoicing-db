@@ -21,7 +21,7 @@ try {
     requireRole($user, [ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_ACCOUNTING, ROLE_SALES], 'You do not have permission to view customer portal links.');
 
     $page = max(1, (int) ($_GET['page'] ?? 1));
-    $limit = min(50, max(5, (int) ($_GET['limit'] ?? 10)));
+    $limit = min(500, max(5, (int) ($_GET['limit'] ?? 10)));
     $offset = ($page - 1) * $limit;
     $search = trim((string) ($_GET['search'] ?? ''));
     $status = trim((string) ($_GET['status'] ?? ''));

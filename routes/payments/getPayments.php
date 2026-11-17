@@ -44,7 +44,7 @@ try {
     $toDate        = isset($_GET['to']) ? trim($_GET['to']) : null;
     $search        = isset($_GET['search']) ? trim($_GET['search']) : null;
 
-    $limit  = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 20;
+    $limit  = isset($_GET['limit']) ? max(1, min(500, (int)$_GET['limit'])) : 20;
     $page   = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
     $offset = ($page - 1) * $limit;
 
